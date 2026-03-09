@@ -1,4 +1,4 @@
-export default function Home() {
+export default function Privacidade() {
   return (
     <main>
       <p>Em breve</p>
