@@ -50,6 +50,22 @@ function formatCPF(value: string): string {
   return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`
 }
 
+function validateCPF(value: string): boolean {
+  const cpf = value.replace(/\D/g, '')
+  if (cpf.length !== 11) return false
+  if (/^(\d)\1{10}$/.test(cpf)) return false
+  let sum = 0
+  for (let i = 0; i < 9; i++) sum += parseInt(cpf[i]) * (10 - i)
+  let remainder = (sum * 10) % 11
+  if (remainder === 10 || remainder === 11) remainder = 0
+  if (remainder !== parseInt(cpf[9])) return false
+  sum = 0
+  for (let i = 0; i < 10; i++) sum += parseInt(cpf[i]) * (11 - i)
+  remainder = (sum * 10) % 11
+  if (remainder === 10 || remainder === 11) remainder = 0
+  return remainder === parseInt(cpf[10])
+}
+
 function formatWhatsApp(value: string): string {
   const d = value.replace(/\D/g, '').slice(0, 11)
   if (d.length === 0) return ''
@@ -148,18 +164,22 @@ function InputField({
   label,
   value,
   onChange,
+  onBlur,
   type = 'text',
   placeholder,
   required = false,
   inputMode,
+  error,
 }: {
   label: string
   value: string
   onChange: (v: string) => void
+  onBlur?: () => void
   type?: string
   placeholder?: string
   required?: boolean
   inputMode?: React.InputHTMLAttributes<HTMLInputElement>['inputMode']
+  error?: string
 }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -175,7 +195,7 @@ function InputField({
         required={required}
         style={{
           backgroundColor: '#2a2a2a',
-          border: '1px solid #444',
+          border: `1px solid ${error ? '#ff6b6b' : '#444'}`,
           borderRadius: 8,
           padding: '12px 14px',
           color: '#fff',
@@ -184,9 +204,15 @@ function InputField({
           width: '100%',
           boxSizing: 'border-box',
         }}
-        onFocus={e => (e.currentTarget.style.borderColor = BRAND.yellow)}
-        onBlur={e => (e.currentTarget.style.borderColor = '#444')}
+        onFocus={e => (e.currentTarget.style.borderColor = error ? '#ff6b6b' : BRAND.yellow)}
+        onBlur={e => {
+          e.currentTarget.style.borderColor = error ? '#ff6b6b' : '#444'
+          onBlur?.()
+        }}
       />
+      {error && (
+        <p style={{ color: '#ff6b6b', fontSize: 13, margin: 0 }}>{error}</p>
+      )}
     </div>
   )
 }
@@ -201,6 +227,7 @@ function CadastroForm() {
   const [error, setError] = useState('')
 
   const [cpf, setCpf] = useState('')
+  const [cpfError, setCpfError] = useState('')
   const [returningParticipant, setReturningParticipant] = useState<{ id: string; nickname: string } | null>(null)
 
   const [nickname, setNickname] = useState('')
@@ -213,13 +240,23 @@ function CadastroForm() {
   const parsedAmount = parseFloat(amountSpent.replace(',', '.')) || 0
   const codePreview = Math.floor(parsedAmount / 50)
 
+  function handleCPFBlur() {
+    const clean = cpf.replace(/\D/g, '')
+    if (clean.length === 0) return
+    if (clean.length !== 11 || !validateCPF(cpf)) {
+      setCpfError('CPF inválido. Verifique os números digitados.')
+    } else {
+      setCpfError('')
+    }
+  }
+
   async function handleCPFLookup(e: React.FormEvent) {
     e.preventDefault()
     setError('')
 
     const cleanCPF = cpf.replace(/\D/g, '')
-    if (cleanCPF.length !== 11) {
-      setError('Digite um CPF valido com 11 digitos.')
+    if (cleanCPF.length !== 11 || !validateCPF(cpf)) {
+      setCpfError('CPF inválido. Verifique os números digitados.')
       return
     }
 
@@ -259,6 +296,11 @@ function CadastroForm() {
 
     if (!lgpdConsent) {
       setError('Voce precisa aceitar a Politica de Privacidade para continuar.')
+      return
+    }
+
+    if (!validateCPF(cpf)) {
+      setCpfError('CPF inválido. Verifique os números digitados.')
       return
     }
 
@@ -413,10 +455,12 @@ function CadastroForm() {
               <InputField
                 label="CPF"
                 value={cpf}
-                onChange={v => setCpf(formatCPF(v))}
+                onChange={v => { setCpf(formatCPF(v)); setCpfError('') }}
+                onBlur={handleCPFBlur}
                 placeholder="000.000.000-00"
                 inputMode="numeric"
                 required
+                error={cpfError}
               />
             </div>
 
@@ -479,10 +523,12 @@ function CadastroForm() {
                 <InputField
                   label="CPF"
                   value={cpf}
-                  onChange={v => setCpf(formatCPF(v))}
+                  onChange={v => { setCpf(formatCPF(v)); setCpfError('') }}
+                  onBlur={handleCPFBlur}
                   placeholder="000.000.000-00"
                   inputMode="numeric"
                   required
+                  error={cpfError}
                 />
                 <InputField
                   label="WhatsApp"
