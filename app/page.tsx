@@ -2,18 +2,16 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 
-async function getTop5() {
-  const { data } = await supabase
+async function getParticipantCount() {
+  const { count } = await supabase
     .from('participants')
-    .select('nickname, code_count')
-    .order('code_count', { ascending: false })
-    .limit(5)
+    .select('id', { count: 'exact', head: true })
 
-  return data ?? []
+  return count ?? 0
 }
 
 export default async function Home() {
-  const top5 = await getTop5()
+  const participantCount = await getParticipantCount()
 
   return (
     <main
@@ -179,108 +177,49 @@ export default async function Home() {
           </div>
         </section>
 
-        {/* ── TOP 5 RANKING TEASER ─────────────────────────────── */}
+        {/* ── PARTICIPANT COUNTER ───────────────────────────────── */}
         <section style={{ paddingBottom: 48 }}>
-          <h2
-            style={{
-              color: '#FFD600',
-              fontSize: 13,
-              fontWeight: 700,
-              letterSpacing: 2,
-              textTransform: 'uppercase',
-              textAlign: 'center',
-              margin: '0 0 20px',
-            }}
-          >
-            Quem esta na frente
-          </h2>
-
           <div
             style={{
               backgroundColor: '#242424',
               borderRadius: 16,
-              overflow: 'hidden',
-              marginBottom: 14,
+              padding: '36px 24px',
+              textAlign: 'center',
             }}
           >
-            {top5.length === 0 ? (
-              <div style={{ padding: '32px 24px', textAlign: 'center' }}>
-                <p style={{ color: '#555', fontSize: 14, margin: 0 }}>
-                  Seja o primeiro a participar!
-                </p>
-              </div>
-            ) : (
-              top5.map((p, i) => {
-                const position = i + 1
-                const medalColors: Record<number, string> = {
-                  1: '#FFD700',
-                  2: '#C0C0C0',
-                  3: '#CD7F32',
-                }
-                const medalColor = medalColors[position]
-
-                return (
-                  <div
-                    key={`${p.nickname}-${i}`}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 14,
-                      padding: '13px 18px',
-                      borderBottom: i < top5.length - 1 ? '1px solid #2e2e2e' : 'none',
-                    }}
-                  >
-                    <span
-                      style={{
-                        color: medalColor ?? '#555',
-                        fontWeight: 700,
-                        fontSize: 14,
-                        minWidth: 20,
-                        textAlign: 'center',
-                      }}
-                    >
-                      {position}
-                    </span>
-                    <span
-                      style={{
-                        color: '#ccc',
-                        fontSize: 14,
-                        flex: 1,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {p.nickname}
-                    </span>
-                    <span style={{ color: '#FFD600', fontWeight: 700, fontSize: 14 }}>
-                      {p.code_count}{' '}
-                      <span style={{ color: '#555', fontWeight: 400, fontSize: 12 }}>
-                        {p.code_count === 1 ? 'cod.' : 'cods.'}
-                      </span>
-                    </span>
-                  </div>
-                )
-              })
+            <p
+              style={{
+                color: '#FFD600',
+                fontSize: 13,
+                fontWeight: 700,
+                letterSpacing: 2,
+                textTransform: 'uppercase',
+                margin: '0 0 16px',
+              }}
+            >
+              Comunidade
+            </p>
+            <p
+              style={{
+                color: '#fff',
+                fontSize: 42,
+                fontWeight: 900,
+                lineHeight: 1,
+                margin: '0 0 10px',
+                letterSpacing: -1,
+              }}
+            >
+              {participantCount.toLocaleString('pt-BR')}
+            </p>
+            <p style={{ color: '#aaa', fontSize: 15, margin: 0 }}>
+              {participantCount === 1 ? 'participante cadastrado' : 'participantes cadastrados'}
+            </p>
+            {participantCount === 0 && (
+              <p style={{ color: '#555', fontSize: 13, marginTop: 8, marginBottom: 0 }}>
+                Seja o primeiro a participar!
+              </p>
             )}
           </div>
-
-          <Link
-            href="/ranking"
-            style={{
-              display: 'block',
-              textAlign: 'center',
-              padding: '12px 0',
-              borderRadius: 10,
-              border: '1px solid #333',
-              color: '#FFD600',
-              fontSize: 14,
-              fontWeight: 600,
-              textDecoration: 'none',
-            }}
-          >
-            Ver ranking completo
-          </Link>
         </section>
 
         {/* ── BOTTOM CTA ───────────────────────────────────────── */}
