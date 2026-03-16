@@ -121,13 +121,13 @@ export default async function Home() {
               },
               {
                 step: '2',
-                title: 'Cadastre seu valor gasto',
-                desc: 'Escaneie o QR Code na loja e informe o valor da sua compra.',
+                title: 'Cadastre-se na campanha',
+                desc: 'Escaneie o QR Code na loja e faca seu cadastro gratuitamente.',
               },
               {
                 step: '3',
-                title: 'Receba codigos e concorra a premios',
-                desc: 'A cada R$50 gastos voce recebe 1 codigo para o sorteio. Quanto mais voce compra, maiores as chances!',
+                title: 'Concorra a premios incriveis',
+                desc: 'Em breve voce podera registrar suas compras e ganhar codigos para o sorteio.',
               },
             ].map(item => (
               <div
@@ -249,7 +249,7 @@ export default async function Home() {
               Pronto para concorrer?
             </p>
             <p style={{ color: '#888', fontSize: 14, lineHeight: 1.6, margin: '0 0 24px' }}>
-              Cadastre sua compra agora e garanta seus codigos. Campanha encerra em 31 de julho de 2026.
+              Cadastre-se agora e faca parte da campanha. Campanha encerra em 31 de julho de 2026.
             </p>
             <Link
               href="/cadastro"
