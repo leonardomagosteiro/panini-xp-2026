@@ -13,17 +13,16 @@ const BRAND = {
 const PRIVACY_POLICY = `POLITICA DE PRIVACIDADE — CAMPANHA PANINI XP FIFA WORLD CUP 2026
 
 1. DADOS COLETADOS
-Coletamos: nome completo, CPF, WhatsApp, e-mail (opcional), apelido publico e valor gasto na compra.
+Coletamos: nome completo, CPF, WhatsApp, e-mail (opcional) e apelido publico.
 
 2. FINALIDADE
 Os dados sao usados exclusivamente para:
 - Identificar o participante na campanha promocional
-- Gerar e atribuir codigos para o sorteio de premios
-- Exibir o ranking publico (apenas apelido e quantidade de codigos)
+- Exibir o ranking publico (apenas apelido)
 - Cumprir obrigacoes legais
 
 3. DADOS PUBLICOS E PRIVADOS
-Apenas o apelido e a quantidade de codigos sao exibidos publicamente no ranking. Nome, CPF, WhatsApp e e-mail NUNCA sao divulgados.
+Apenas o apelido e exibido publicamente no ranking. Nome, CPF, WhatsApp e e-mail NUNCA sao divulgados.
 
 4. COMPARTILHAMENTO
 Nao vendemos nem compartilhamos seus dados com terceiros, exceto quando exigido por lei ou para operacao tecnica da plataforma (Supabase, servidor de hospedagem).
@@ -234,11 +233,7 @@ function CadastroForm() {
   const [fullName, setFullName] = useState('')
   const [whatsapp, setWhatsapp] = useState('')
   const [email, setEmail] = useState('')
-  const [amountSpent, setAmountSpent] = useState('')
   const [lgpdConsent, setLgpdConsent] = useState(false)
-
-  const parsedAmount = parseFloat(amountSpent.replace(',', '.')) || 0
-  const codePreview = Math.floor(parsedAmount / 50)
 
   function handleCPFBlur() {
     const clean = cpf.replace(/\D/g, '')
@@ -277,8 +272,6 @@ function CadastroForm() {
 
       if (data.found) {
         setReturningParticipant(data.participant)
-        setAmountSpent('')
-        setLgpdConsent(false)
         setMode('returning')
       } else {
         setMode('new')
@@ -304,13 +297,8 @@ function CadastroForm() {
       return
     }
 
-    if (!nickname.trim() || !fullName.trim() || !whatsapp.trim() || !amountSpent) {
+    if (!nickname.trim() || !fullName.trim() || !whatsapp.trim()) {
       setError('Preencha todos os campos obrigatorios.')
-      return
-    }
-
-    if (parsedAmount < 50) {
-      setError('Valor minimo para participar e R$50.')
       return
     }
 
@@ -327,7 +315,6 @@ function CadastroForm() {
           cpf,
           whatsapp,
           email: email.trim() || null,
-          amount_spent: parsedAmount,
           store_origin: storeOrigin || null,
           lgpd_consent: true,
         }),
@@ -336,48 +323,6 @@ function CadastroForm() {
 
       if (!res.ok) {
         setError(data.error || 'Erro ao realizar cadastro. Tente novamente.')
-        return
-      }
-
-      router.push(`/confirmacao?id=${data.participant_id}`)
-    } catch {
-      setError('Erro de conexao. Verifique sua internet e tente novamente.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleReturningSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setError('')
-
-    if (!lgpdConsent) {
-      setError('Voce precisa aceitar a Politica de Privacidade para continuar.')
-      return
-    }
-
-    if (parsedAmount < 50) {
-      setError('Valor minimo para participar e R$50.')
-      return
-    }
-
-    setLoading(true)
-
-    try {
-      const res = await fetch('/api/cadastro', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'returning',
-          participant_id: returningParticipant!.id,
-          amount_spent: parsedAmount,
-          lgpd_consent: true,
-        }),
-      })
-      const data = await res.json()
-
-      if (!res.ok) {
-        setError(data.error || 'Erro ao registrar compra. Tente novamente.')
         return
       }
 
@@ -448,7 +393,7 @@ function CadastroForm() {
         {mode === 'cpf-check' && (
           <form onSubmit={handleCPFLookup}>
             <div style={cardStyle}>
-              <p style={sectionTitle}>Ja participou antes?</p>
+              <p style={sectionTitle}>Pre-cadastro</p>
               <p style={{ color: '#aaa', fontSize: 14, marginBottom: 20, lineHeight: 1.5 }}>
                 Digite seu CPF para verificarmos seu cadastro.
               </p>
@@ -471,25 +416,6 @@ function CadastroForm() {
             <button type="submit" style={buttonStyle} disabled={loading}>
               {loading ? 'Verificando...' : 'Continuar'}
             </button>
-
-            <p style={{ textAlign: 'center', marginTop: 20, color: '#777', fontSize: 14 }}>
-              Primeira vez?{' '}
-              <button
-                type="button"
-                onClick={() => { setError(''); setMode('new') }}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: BRAND.yellow,
-                  fontSize: 14,
-                  cursor: 'pointer',
-                  textDecoration: 'underline',
-                  padding: 0,
-                }}
-              >
-                Fazer novo cadastro
-              </button>
-            </p>
           </form>
         )}
 
@@ -548,38 +474,6 @@ function CadastroForm() {
               </div>
             </div>
 
-            <div style={cardStyle}>
-              <p style={sectionTitle}>Valor da compra</p>
-              <InputField
-                label="Quanto voce gastou? (R$)"
-                value={amountSpent}
-                onChange={setAmountSpent}
-                type="number"
-                placeholder="Ex: 150"
-                inputMode="decimal"
-                required
-              />
-              {codePreview > 0 && (
-                <div
-                  style={{
-                    marginTop: 16,
-                    padding: '12px 16px',
-                    backgroundColor: 'rgba(255,214,0,0.1)',
-                    borderRadius: 8,
-                    border: `1px solid ${BRAND.yellow}`,
-                    textAlign: 'center',
-                  }}
-                >
-                  <span style={{ color: BRAND.yellow, fontWeight: 700, fontSize: 18 }}>
-                    Voce vai receber {codePreview} {codePreview === 1 ? 'codigo' : 'codigos'}!
-                  </span>
-                  <p style={{ color: '#aaa', fontSize: 12, marginTop: 4, marginBottom: 0 }}>
-                    1 codigo a cada R$50 gastos
-                  </p>
-                </div>
-              )}
-            </div>
-
             <div style={{ ...cardStyle }}>
               <p style={sectionTitle}>Consentimento</p>
               <PrivacyPolicyToggle consent={lgpdConsent} onConsentChange={setLgpdConsent} />
@@ -590,7 +484,7 @@ function CadastroForm() {
             )}
 
             <button type="submit" style={buttonStyle} disabled={loading}>
-              {loading ? 'Cadastrando...' : 'Cadastrar e receber codigos'}
+              {loading ? 'Cadastrando...' : 'Cadastrar'}
             </button>
 
             <p style={{ textAlign: 'center', marginTop: 16, color: '#777', fontSize: 13 }}>
@@ -615,86 +509,36 @@ function CadastroForm() {
 
         {/* ── MODE: RETURNING CUSTOMER ───────────────────────── */}
         {mode === 'returning' && returningParticipant && (
-          <form onSubmit={handleReturningSubmit}>
-            <div style={cardStyle}>
-              <p
-                style={{
-                  color: BRAND.yellow,
-                  fontSize: 20,
-                  fontWeight: 700,
-                  marginBottom: 8,
-                }}
-              >
-                Ola, {returningParticipant.nickname}!
-              </p>
-              <p style={{ color: '#aaa', fontSize: 14, lineHeight: 1.5 }}>
-                Bem-vindo de volta. Informe o valor desta compra para receber mais codigos.
-              </p>
-            </div>
-
-            <div style={cardStyle}>
-              <p style={sectionTitle}>Esta compra</p>
-              <InputField
-                label="Quanto voce gastou desta vez? (R$)"
-                value={amountSpent}
-                onChange={setAmountSpent}
-                type="number"
-                placeholder="Ex: 100"
-                inputMode="decimal"
-                required
-              />
-              {codePreview > 0 && (
-                <div
-                  style={{
-                    marginTop: 16,
-                    padding: '12px 16px',
-                    backgroundColor: 'rgba(255,214,0,0.1)',
-                    borderRadius: 8,
-                    border: `1px solid ${BRAND.yellow}`,
-                    textAlign: 'center',
-                  }}
-                >
-                  <span style={{ color: BRAND.yellow, fontWeight: 700, fontSize: 18 }}>
-                    Voce vai receber {codePreview} {codePreview === 1 ? 'codigo' : 'codigos'}!
-                  </span>
-                  <p style={{ color: '#aaa', fontSize: 12, marginTop: 4, marginBottom: 0 }}>
-                    1 codigo a cada R$50 gastos
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div style={cardStyle}>
-              <p style={sectionTitle}>Consentimento</p>
-              <PrivacyPolicyToggle consent={lgpdConsent} onConsentChange={setLgpdConsent} />
-            </div>
-
-            {error && (
-              <p style={{ color: '#ff6b6b', fontSize: 14, marginBottom: 16, textAlign: 'center' }}>{error}</p>
-            )}
-
-            <button type="submit" style={buttonStyle} disabled={loading}>
-              {loading ? 'Registrando...' : 'Receber meus codigos'}
-            </button>
-
-            <p style={{ textAlign: 'center', marginTop: 16, color: '#777', fontSize: 13 }}>
-              <button
-                type="button"
-                onClick={() => { setError(''); setCpf(''); setMode('cpf-check') }}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#777',
-                  fontSize: 13,
-                  cursor: 'pointer',
-                  textDecoration: 'underline',
-                  padding: 0,
-                }}
-              >
-                Nao sou eu — voltar
-              </button>
+          <div style={cardStyle}>
+            <p
+              style={{
+                color: BRAND.yellow,
+                fontSize: 20,
+                fontWeight: 700,
+                marginBottom: 12,
+              }}
+            >
+              Voce ja esta cadastrado, {returningParticipant.nickname}!
             </p>
-          </form>
+            <p style={{ color: '#aaa', fontSize: 15, lineHeight: 1.6, marginBottom: 24 }}>
+              Fique ligado para novidades da campanha.
+            </p>
+            <button
+              type="button"
+              onClick={() => { setError(''); setCpf(''); setMode('cpf-check') }}
+              style={{
+                background: 'none',
+                border: `1px solid #444`,
+                borderRadius: 8,
+                color: '#aaa',
+                fontSize: 14,
+                cursor: 'pointer',
+                padding: '10px 16px',
+              }}
+            >
+              Voltar
+            </button>
+          </div>
         )}
 
       </div>

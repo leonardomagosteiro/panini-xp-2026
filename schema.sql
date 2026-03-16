@@ -5,7 +5,7 @@ create table participants (
   cpf           text not null unique,
   whatsapp      text not null,
   email         text,
-  amount_spent  numeric(10, 2) not null check (amount_spent > 0),
+  amount_spent  numeric(10, 2),
   code_count    integer not null default 0,
   store_origin  text,
   lgpd_consent  boolean not null default false,
