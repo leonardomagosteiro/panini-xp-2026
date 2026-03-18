@@ -27,17 +27,22 @@
 
 ## What This Project Is
 A web platform for the Panini XP FIFA World Cup 2026 promotional campaign.
-Customers register, submit their purchase amount, and receive unique codes.
+Customers register in one of 10 store locations, submit their purchase amount, and receive unique codes.
 Every R$50 spent = 1 code. Codes are used in a prize draw.
 
+## Current Phase
+Pre-registration — code generation and receipt upload are NOT active yet.
+Only participant registration (/cadastro) is live.
+
 ## Tech Stack
-- Next.js 14 with App Router and TypeScript
+- Next.js 14 with App Router and TypeScript (scope: /cadastro, /confirmacao, /ranking, /privacidade)
 - Tailwind CSS for styling
 - Supabase (São Paulo region) for database and backend
 - Vercel for hosting
+- Unicorn Platform for the landing page (external, not part of this Next.js app)
+- A standalone JavaScript snippet embeds the live participant counter in Unicorn Platform via Supabase
 
-## Pages
-- / → Landing page (for social media traffic)
+## Pages (Next.js scope — landing page is NOT here)
 - /cadastro → Registration form (for in-store QR code traffic)
 - /confirmacao → Shows generated codes after registration
 - /ranking → Public leaderboard (nickname + code count only)
