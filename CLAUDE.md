@@ -31,8 +31,7 @@ Customers register in one of 10 store locations, submit their purchase amount, a
 Every R$50 spent = 1 code. Codes are used in a prize draw.
 
 ## Current Phase
-Pre-registration — code generation and receipt upload are NOT active yet.
-Only participant registration (/cadastro) is live.
+Phase 2 in progress — receipt upload built, code generation pending.
 
 ## Tech Stack
 - Next.js 14 with App Router and TypeScript (scope: /cadastro, /confirmacao, /ranking, /privacidade)
@@ -45,12 +44,37 @@ Only participant registration (/cadastro) is live.
 ## Pages (Next.js scope — landing page is NOT here)
 - /cadastro → Registration form (for in-store QR code traffic)
 - /confirmacao → Shows generated codes after registration
+- /enviar-recibo → Receipt upload page (Phase 2 — built tonight)
 - /ranking → Public leaderboard (nickname + code count only)
 - /privacidade → LGPD privacy policy
 
 ## Database Tables
 - participants: stores customer data (most fields private/LGPD)
 - codes: stores generated codes linked to participants
+- receipts: stores uploaded receipt records linked to participants (Phase 2)
+
+## Supabase Storage
+- Bucket: receipts — holds receipt images uploaded by customers
+
+## Phase 2 — Tonight's Scope (Receipt Upload)
+BUILT TONIGHT:
+1. receipts table linked to participants (by participant_id and CPF)
+2. Supabase Storage bucket for receipt images
+3. /enviar-recibo page — customer enters CPF, selects receipt photo, uploads
+4. After upload: confirmation message "Recibo recebido. Voce sera notificado em breve com seu codigo."
+5. Receipt stored and linked to participant, awaiting processing
+
+DEFERRED (not tonight):
+- AI validation of CNPJ and amount
+- Automatic code generation
+- Admin manual review page
+- Email/WhatsApp notification to customer
+- Returning customer email blast
+
+## Business Constants
+- DMCAMP CNPJ (for future validation): 07.348.198/0001-48
+- Code generation rule (for future): 1 code per R$50 (floor division)
+- Code format (for future): PXP-2026-XXXXX (X = random uppercase alphanumeric)
 
 ## Public vs Private Data
 - PUBLIC (visible in ranking): nickname, code_count
@@ -61,8 +85,6 @@ Only participant registration (/cadastro) is live.
 - Never expose private fields in any public query or API call
 - Never modify the database schema without asking Leonardo first
 - Always validate CPF uniqueness before inserting a new participant
-- Code format: PXP-2026-XXXXX (X = random uppercase alphanumeric)
-- One code generated per R$50 spent (floor division)
 - The .env.local file must never be committed to GitHub
 
 ## Coding Style
