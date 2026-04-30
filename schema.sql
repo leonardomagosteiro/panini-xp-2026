@@ -23,6 +23,27 @@ create index on codes (participant_id);
 create index on participants (cpf);
 create index on participants (code_count desc);
 
+create table receipts (
+  id              uuid primary key default gen_random_uuid(),
+  participant_id  uuid not null references participants(id) on delete cascade,
+  cpf             text not null,
+  storage_path    text not null,
+  status          text not null default 'uploaded'
+                    check (status in ('uploaded', 'validated', 'rejected', 'processed')),
+  amount_on_receipt  numeric(10, 2),
+  cnpj_on_receipt    text,
+  rejection_reason   text,
+  codes_generated    integer,
+  reviewed_by        text,
+  reviewed_at        timestamptz,
+  created_at         timestamptz not null default now(),
+  updated_at         timestamptz not null default now()
+);
+
+create index receipts_participant_id_idx on receipts(participant_id);
+create index receipts_cpf_idx on receipts(cpf);
+create index receipts_status_idx on receipts(status);
+
 alter table participants enable row level security;
 alter table codes enable row level security;
 
