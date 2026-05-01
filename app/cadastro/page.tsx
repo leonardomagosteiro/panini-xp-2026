@@ -392,7 +392,7 @@ function CadastroForm() {
         {mode === 'cpf-check' && (
           <form onSubmit={handleCPFLookup}>
             <div style={cardStyle}>
-              <p style={sectionTitle}>Pre-cadastro</p>
+              <p style={sectionTitle}>Cadastro</p>
               <p style={{ color: '#aaa', fontSize: 14, marginBottom: 20, lineHeight: 1.5 }}>
                 Digite seu CPF para verificarmos seu cadastro.
               </p>
