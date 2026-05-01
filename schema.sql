@@ -44,9 +44,21 @@ create index receipts_participant_id_idx on receipts(participant_id);
 create index receipts_cpf_idx on receipts(cpf);
 create index receipts_status_idx on receipts(status);
 
+create table error_logs (
+  id              uuid primary key default gen_random_uuid(),
+  source          text not null,
+  error_message   text not null,
+  error_details   jsonb,
+  created_at      timestamptz not null default now()
+);
+
+create index error_logs_source_idx on error_logs(source);
+create index error_logs_created_at_idx on error_logs(created_at desc);
+
 alter table participants enable row level security;
 alter table codes enable row level security;
 alter table receipts enable row level security;
+alter table error_logs enable row level security;
 
 create policy "public can read ranking fields"
   on participants for select
