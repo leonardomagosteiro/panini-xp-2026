@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 
 const BRAND = {
@@ -35,19 +36,50 @@ function validateCPF(value: string): boolean {
 
 type Mode = 'cpf-check' | 'photo-select' | 'success'
 
-export default function EnviarReciboPage() {
+function EnviarReciboForm() {
+  const searchParams = useSearchParams()
+  const cpfParam = searchParams.get('cpf') || ''
+  const isNew = searchParams.get('new') === '1'
+  const isWelcome = searchParams.get('welcome') === '1'
+  const nicknameParam = searchParams.get('nickname') || ''
+
   const [mode, setMode] = useState<Mode>('cpf-check')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const [cpf, setCpf] = useState('')
+  const [cpf, setCpf] = useState(cpfParam)
   const [cpfError, setCpfError] = useState('')
-  const [participantId, setParticipantId] = useState('')
 
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Auto-validate CPF from URL param on mount
+  useEffect(() => {
+    if (!cpfParam) return
+
+    setLoading(true)
+    fetch('/api/cpf-lookup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cpf: cpfParam }),
+    })
+      .then(res => res.json().then(data => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => {
+        if (!ok || !data.found) {
+          setError('Nao foi possivel verificar seu CPF automaticamente. Digite manualmente abaixo.')
+          setCpf('')
+        } else {
+          setMode('photo-select')
+        }
+      })
+      .catch(() => {
+        setError('Erro de conexao. Digite seu CPF manualmente abaixo.')
+        setCpf('')
+      })
+      .finally(() => setLoading(false))
+  }, [cpfParam])
 
   const cardStyle: React.CSSProperties = {
     backgroundColor: '#242424',
@@ -118,7 +150,6 @@ export default function EnviarReciboPage() {
         return
       }
 
-      setParticipantId(data.participant.id)
       setMode('photo-select')
     } catch {
       setError('Erro de conexao. Verifique sua internet e tente novamente.')
@@ -160,7 +191,7 @@ export default function EnviarReciboPage() {
     setLoading(true)
     try {
       const formData = new FormData()
-      formData.append('cpf', cpf)
+      formData.append('cpf', cpf || cpfParam)
       formData.append('file', selectedFile)
 
       const res = await fetch('/api/upload-recibo', {
@@ -206,8 +237,52 @@ export default function EnviarReciboPage() {
 
       <div style={{ width: '100%', maxWidth: 480 }}>
 
+        {/* BANNER */}
+        {mode !== 'success' && isNew && (
+          <div
+            style={{
+              backgroundColor: 'rgba(34,197,94,0.12)',
+              border: '1px solid rgba(34,197,94,0.4)',
+              borderRadius: 12,
+              padding: '14px 18px',
+              marginBottom: 16,
+              color: '#4ade80',
+              fontSize: 15,
+              fontWeight: 600,
+              lineHeight: 1.4,
+            }}
+          >
+            Cadastro feito! Agora envie seu primeiro recibo.
+          </div>
+        )}
+
+        {mode !== 'success' && isWelcome && nicknameParam && (
+          <div
+            style={{
+              backgroundColor: 'rgba(255,214,0,0.08)',
+              border: `1px solid rgba(255,214,0,0.35)`,
+              borderRadius: 12,
+              padding: '14px 18px',
+              marginBottom: 16,
+              color: BRAND.yellow,
+              fontSize: 15,
+              fontWeight: 600,
+              lineHeight: 1.4,
+            }}
+          >
+            Bem-vindo de volta, {nicknameParam}! Envie seu proximo recibo.
+          </div>
+        )}
+
+        {/* LOADING STATE (auto-validating CPF from URL) */}
+        {loading && mode === 'cpf-check' && (
+          <div style={{ textAlign: 'center', padding: '48px 0' }}>
+            <p style={{ color: '#aaa', fontSize: 15 }}>Verificando seu cadastro...</p>
+          </div>
+        )}
+
         {/* CPF CHECK */}
-        {mode === 'cpf-check' && (
+        {!loading && mode === 'cpf-check' && (
           <form onSubmit={handleCPFLookup}>
             <div style={cardStyle}>
               <p style={sectionTitle}>Enviar Recibo</p>
@@ -251,7 +326,7 @@ export default function EnviarReciboPage() {
             )}
 
             <button type="submit" style={buttonStyle} disabled={loading}>
-              {loading ? 'Verificando...' : 'Continuar'}
+              Continuar
             </button>
           </form>
         )}
@@ -281,7 +356,7 @@ export default function EnviarReciboPage() {
                     width: '100%',
                     padding: '32px 16px',
                     borderRadius: 10,
-                    border: `2px dashed #444`,
+                    border: '2px dashed #444',
                     backgroundColor: '#1a1a1a',
                     color: '#aaa',
                     fontSize: 15,
@@ -299,7 +374,7 @@ export default function EnviarReciboPage() {
                       borderRadius: 10,
                       overflow: 'hidden',
                       marginBottom: 12,
-                      border: `1px solid #444`,
+                      border: '1px solid #444',
                     }}
                   >
                     <img
@@ -331,14 +406,22 @@ export default function EnviarReciboPage() {
               <p style={{ color: '#ff6b6b', fontSize: 14, marginBottom: 16, textAlign: 'center' }}>{error}</p>
             )}
 
-            <button type="submit" style={{ ...buttonStyle, backgroundColor: loading || !selectedFile ? '#555' : BRAND.yellow, cursor: loading || !selectedFile ? 'not-allowed' : 'pointer' }} disabled={loading || !selectedFile}>
+            <button
+              type="submit"
+              style={{
+                ...buttonStyle,
+                backgroundColor: loading || !selectedFile ? '#555' : BRAND.yellow,
+                cursor: loading || !selectedFile ? 'not-allowed' : 'pointer',
+              }}
+              disabled={loading || !selectedFile}
+            >
               {loading ? 'Enviando...' : 'Enviar Recibo'}
             </button>
 
             <p style={{ textAlign: 'center', marginTop: 16 }}>
               <button
                 type="button"
-                onClick={() => { setError(''); setMode('cpf-check') }}
+                onClick={() => { setError(''); setMode('cpf-check'); setCpf('') }}
                 style={{
                   background: 'none',
                   border: 'none',
@@ -358,14 +441,7 @@ export default function EnviarReciboPage() {
         {/* SUCCESS */}
         {mode === 'success' && (
           <div style={cardStyle}>
-            <p
-              style={{
-                color: BRAND.yellow,
-                fontSize: 20,
-                fontWeight: 700,
-                marginBottom: 12,
-              }}
-            >
+            <p style={{ color: BRAND.yellow, fontSize: 20, fontWeight: 700, marginBottom: 12 }}>
               Recibo recebido!
             </p>
             <p style={{ color: '#aaa', fontSize: 15, lineHeight: 1.7, marginBottom: 24 }}>
@@ -374,15 +450,15 @@ export default function EnviarReciboPage() {
             <button
               type="button"
               onClick={() => {
-                setCpf('')
+                setCpf(cpfParam)
                 setSelectedFile(null)
                 setPreviewUrl(null)
                 setError('')
-                setMode('cpf-check')
+                setMode('photo-select')
               }}
               style={{
                 background: 'none',
-                border: `1px solid #444`,
+                border: '1px solid #444',
                 borderRadius: 8,
                 color: '#aaa',
                 fontSize: 14,
@@ -397,5 +473,27 @@ export default function EnviarReciboPage() {
 
       </div>
     </main>
+  )
+}
+
+export default function EnviarReciboPage() {
+  return (
+    <Suspense
+      fallback={
+        <main
+          style={{
+            minHeight: '100vh',
+            backgroundColor: '#1A1A1A',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <p style={{ color: '#FFD600', fontSize: 16 }}>Carregando...</p>
+        </main>
+      }
+    >
+      <EnviarReciboForm />
+    </Suspense>
   )
 }

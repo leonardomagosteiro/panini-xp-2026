@@ -271,8 +271,7 @@ function CadastroForm() {
       }
 
       if (data.found) {
-        setReturningParticipant(data.participant)
-        setMode('returning')
+        router.push(`/enviar-recibo?cpf=${encodeURIComponent(cpf)}&welcome=1&nickname=${encodeURIComponent(data.participant.nickname)}`)
       } else {
         setMode('new')
       }
@@ -326,7 +325,7 @@ function CadastroForm() {
         return
       }
 
-      router.push(`/confirmacao?id=${data.participant_id}`)
+      router.push(`/enviar-recibo?cpf=${encodeURIComponent(cpf)}&new=1`)
     } catch {
       setError('Erro de conexao. Verifique sua internet e tente novamente.')
     } finally {
