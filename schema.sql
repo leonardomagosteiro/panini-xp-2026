@@ -46,6 +46,7 @@ create index receipts_status_idx on receipts(status);
 
 alter table participants enable row level security;
 alter table codes enable row level security;
+alter table receipts enable row level security;
 
 create policy "public can read ranking fields"
   on participants for select
