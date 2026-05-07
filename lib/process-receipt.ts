@@ -82,9 +82,17 @@ export async function processReceipt(
   }
 
   if (!participant.email) {
-    await revertToUploaded(receiptId, supabase)
-    await logError('process-receipt', 'Participant has no email', { receiptId, participant_id: receipt.participant_id })
-    return { status: 'error', message: 'Participant has no email' }
+    // Condition 1 — No email on file: route to needs_review for admin follow-up.
+    // Not an error — this is expected for participants who registered without email.
+    // Admin UI (Component 8) will show the _system_note to explain why it's here.
+    await supabase
+      .from('receipts')
+      .update({
+        status: 'needs_review',
+        ai_raw_response: { _system_note: 'no_email_on_file', skipped_at: new Date().toISOString() },
+      })
+      .eq('id', receiptId)
+    return { status: 'needs_review' }
   }
 
   const email: string = participant.email
@@ -116,17 +124,57 @@ export async function processReceipt(
   const arrayBuffer = await imageData.arrayBuffer()
   const imageBase64 = Buffer.from(arrayBuffer).toString('base64')
 
+  // Condition 2 — Image too large for Anthropic API (5MB raw → ~6.7MB base64).
+  // Check before calling extractReceipt to avoid a guaranteed API error and save cost.
+  // Threshold: 7MB in base64 chars to allow minor encoding overhead.
+  const BASE64_SIZE_LIMIT = 7 * 1024 * 1024
+  if (imageBase64.length > BASE64_SIZE_LIMIT) {
+    await supabase
+      .from('receipts')
+      .update({
+        status: 'needs_review',
+        ai_raw_response: {
+          _system_note: 'image_too_large',
+          size_bytes_base64: imageBase64.length,
+          skipped_at: new Date().toISOString(),
+        },
+      })
+      .eq('id', receiptId)
+    return { status: 'needs_review' }
+  }
+
   // Step 5 — Extract data via AI
   let extracted: Awaited<ReturnType<typeof extractReceipt>>
   try {
     extracted = await extractReceipt(imageBase64, mimeType)
   } catch (err) {
+    const errMessage = err instanceof Error ? err.message : String(err)
+
+    // Condition 3 — Image unprocessable by Claude (corrupt, unsupported format, etc.).
+    // These are permanent failures — retrying won't help. Route to needs_review
+    // so admin can inspect the image manually. Other errors (network, timeout)
+    // keep the existing behavior: revert to uploaded so the receipt can be retried.
+    if (/could not process image|invalid image|unsupported image format/i.test(errMessage)) {
+      await supabase
+        .from('receipts')
+        .update({
+          status: 'needs_review',
+          ai_raw_response: {
+            _system_note: 'image_unprocessable',
+            error: errMessage,
+            skipped_at: new Date().toISOString(),
+          },
+        })
+        .eq('id', receiptId)
+      return { status: 'needs_review' }
+    }
+
     await revertToUploaded(receiptId, supabase)
     await logError('process-receipt', 'AI extraction failed', {
       receiptId,
-      error: String(err),
+      error: errMessage,
     })
-    return { status: 'error', message: `Extraction failed: ${err instanceof Error ? err.message : String(err)}` }
+    return { status: 'error', message: `Extraction failed: ${errMessage}` }
   }
 
   // Step 6 — Save AI metadata to receipt row (log failure but continue)
