@@ -1,0 +1,41 @@
+{
+  "backup_date": "2026-05-07",
+  "description": "Pre-deletion backup of 6 legacy/test participants and their cascading data. These participants were created on 2026-03-10 to 2026-03-12, predating the campaign launch (2026-04-30). Codes were generated via the old registration-time flow, not from receipts.",
+  "participants": [
+    {"id":"5c76a80c-5efb-4338-adb7-e1c69aa55922","nickname":"Craque2026","full_name":"João Teste","cpf":"123.456.789-09","whatsapp":"(11) 99999-9999","email":null,"amount_spent":150.00,"code_count":3,"store_origin":null,"lgpd_consent":true,"created_at":"2026-03-10T23:10:24.125465+00:00"},
+    {"id":"f42422d9-8e0f-4bae-b1d2-6d6784624464","nickname":"Mene","full_name":"Leonardo Meneguzzi","cpf":"068.863.959-38","whatsapp":"(49) 99940-2097","email":"meneguzzileo@gmail.com","amount_spent":300.00,"code_count":6,"store_origin":null,"lgpd_consent":true,"created_at":"2026-03-11T00:14:54.543102+00:00"},
+    {"id":"57cc035c-cbde-4afe-a7a0-fdc9e512af8b","nickname":"Teste01Leo","full_name":"Teste01Leo Teste01Leo","cpf":"019.238.004-21","whatsapp":"(12) 39891-8273","email":null,"amount_spent":389.00,"code_count":7,"store_origin":null,"lgpd_consent":true,"created_at":"2026-03-11T00:19:33.607415+00:00"},
+    {"id":"ce1ddda5-1d78-4970-9d5a-f814ebf3277f","nickname":"Mene","full_name":"Leonardo Meneguzzi","cpf":"068.863.959-37","whatsapp":"(49) 99940-2097","email":"meneguzzileo@gmail.com","amount_spent":100.00,"code_count":2,"store_origin":null,"lgpd_consent":true,"created_at":"2026-03-11T00:21:06.598102+00:00"},
+    {"id":"ac9d86b9-d735-47ae-8f5e-c3112bc9d82f","nickname":"Reuzy","full_name":"Marllon Reuzy Giovane Coelho","cpf":"148.772.577-99","whatsapp":"(19) 99361-4676","email":"marllongiovani@hotmail.com","amount_spent":149.00,"code_count":2,"store_origin":null,"lgpd_consent":true,"created_at":"2026-03-11T17:21:38.784146+00:00"},
+    {"id":"fc128e93-b3f5-47d7-a707-3132a93f2089","nickname":"Leozin10","full_name":"Leonardo Magosteiro","cpf":"420.834.628-07","whatsapp":"(11) 99923-1020","email":null,"amount_spent":200.00,"code_count":4,"store_origin":null,"lgpd_consent":true,"created_at":"2026-03-12T19:35:43.154386+00:00"}
+  ],
+  "codes": [
+    {"id":"7b6819f9-d1f2-420d-9234-6b71f3367302","code":"PXP-2026-F2AGA","participant_id":"5c76a80c-5efb-4338-adb7-e1c69aa55922","created_at":"2026-03-10T23:10:24.590274+00:00"},
+    {"id":"933b49dd-262b-4aaf-b2be-be87a726ba9f","code":"PXP-2026-AN8TY","participant_id":"5c76a80c-5efb-4338-adb7-e1c69aa55922","created_at":"2026-03-10T23:10:24.590274+00:00"},
+    {"id":"678ffc88-5441-47dd-8afb-fa5a74db80b5","code":"PXP-2026-AVOUR","participant_id":"5c76a80c-5efb-4338-adb7-e1c69aa55922","created_at":"2026-03-10T23:10:24.590274+00:00"},
+    {"id":"55af5813-49cb-4653-99fc-bf8f2ad5c457","code":"PXP-2026-R1WC6","participant_id":"f42422d9-8e0f-4bae-b1d2-6d6784624464","created_at":"2026-03-11T00:14:56.01672+00:00"},
+    {"id":"4a585b90-e26a-418d-a6e2-a6b3ba16f54b","code":"PXP-2026-1URMK","participant_id":"f42422d9-8e0f-4bae-b1d2-6d6784624464","created_at":"2026-03-11T00:14:56.01672+00:00"},
+    {"id":"fdf0f69f-6b70-4fa0-aa26-a2df35dcf8f1","code":"PXP-2026-EU9ZC","participant_id":"f42422d9-8e0f-4bae-b1d2-6d6784624464","created_at":"2026-03-11T00:14:56.01672+00:00"},
+    {"id":"a421f918-868b-45d7-8035-e9b6e2bc5004","code":"PXP-2026-VJBAF","participant_id":"f42422d9-8e0f-4bae-b1d2-6d6784624464","created_at":"2026-03-11T00:14:56.01672+00:00"},
+    {"id":"7f63b97c-5784-4035-b771-b4f0abbe07d2","code":"PXP-2026-C0RK3","participant_id":"f42422d9-8e0f-4bae-b1d2-6d6784624464","created_at":"2026-03-11T00:14:56.01672+00:00"},
+    {"id":"df12b017-60d6-4b08-99a0-0fdbd43db904","code":"PXP-2026-730AS","participant_id":"f42422d9-8e0f-4bae-b1d2-6d6784624464","created_at":"2026-03-11T00:14:56.01672+00:00"},
+    {"id":"e72be7cc-de8d-458c-b85d-03c118df6bc9","code":"PXP-2026-XKJKI","participant_id":"57cc035c-cbde-4afe-a7a0-fdc9e512af8b","created_at":"2026-03-11T00:19:36.138999+00:00"},
+    {"id":"45c72370-6f5e-4fd4-bf33-0f4776e2f8d2","code":"PXP-2026-6QZNW","participant_id":"57cc035c-cbde-4afe-a7a0-fdc9e512af8b","created_at":"2026-03-11T00:19:36.138999+00:00"},
+    {"id":"7266dc9d-b3f9-4aea-b727-db2e781400b5","code":"PXP-2026-LRDAJ","participant_id":"57cc035c-cbde-4afe-a7a0-fdc9e512af8b","created_at":"2026-03-11T00:19:36.138999+00:00"},
+    {"id":"c3ba9a30-2136-492c-8866-89683d4cd837","code":"PXP-2026-2719X","participant_id":"57cc035c-cbde-4afe-a7a0-fdc9e512af8b","created_at":"2026-03-11T00:19:36.138999+00:00"},
+    {"id":"d3c46f7e-bf8e-48da-980a-8b9adefc2f5d","code":"PXP-2026-24NPV","participant_id":"57cc035c-cbde-4afe-a7a0-fdc9e512af8b","created_at":"2026-03-11T00:19:36.138999+00:00"},
+    {"id":"0f83773f-7994-4cac-9613-ec28429ad83d","code":"PXP-2026-6U6QD","participant_id":"57cc035c-cbde-4afe-a7a0-fdc9e512af8b","created_at":"2026-03-11T00:19:36.138999+00:00"},
+    {"id":"d94dc14c-8274-4288-958d-ea799da048c8","code":"PXP-2026-F3J7K","participant_id":"57cc035c-cbde-4afe-a7a0-fdc9e512af8b","created_at":"2026-03-11T00:19:36.138999+00:00"},
+    {"id":"72aa3fd1-aa99-400c-8054-cb6ef7282f04","code":"PXP-2026-73BBA","participant_id":"ce1ddda5-1d78-4970-9d5a-f814ebf3277f","created_at":"2026-03-11T00:21:07.424942+00:00"},
+    {"id":"4c9d9214-a872-4e5e-9d3a-428075b0de06","code":"PXP-2026-03DP7","participant_id":"ce1ddda5-1d78-4970-9d5a-f814ebf3277f","created_at":"2026-03-11T00:21:07.424942+00:00"},
+    {"id":"6af0889b-c8be-4c41-a024-6c9326332e79","code":"PXP-2026-580WT","participant_id":"ac9d86b9-d735-47ae-8f5e-c3112bc9d82f","created_at":"2026-03-11T17:21:39.853746+00:00"},
+    {"id":"0a1da757-f144-43d9-94b8-ec8f30efb810","code":"PXP-2026-GHG4V","participant_id":"ac9d86b9-d735-47ae-8f5e-c3112bc9d82f","created_at":"2026-03-11T17:21:39.853746+00:00"},
+    {"id":"2cc961ea-c554-4cbd-a651-03631b4ef97d","code":"PXP-2026-V0P4M","participant_id":"fc128e93-b3f5-47d7-a707-3132a93f2089","created_at":"2026-03-12T19:35:45.043542+00:00"},
+    {"id":"85ee0ea9-a0ab-4208-a396-f30091073228","code":"PXP-2026-MHMFQ","participant_id":"fc128e93-b3f5-47d7-a707-3132a93f2089","created_at":"2026-03-12T19:35:45.043542+00:00"},
+    {"id":"2e129df4-8f6a-4cbd-b519-4ffb8a5abac2","code":"PXP-2026-1UZ0R","participant_id":"fc128e93-b3f5-47d7-a707-3132a93f2089","created_at":"2026-03-12T19:35:45.043542+00:00"},
+    {"id":"ec4259fc-2374-418c-99ef-f07cdbdb76e4","code":"PXP-2026-6WBT7","participant_id":"fc128e93-b3f5-47d7-a707-3132a93f2089","created_at":"2026-03-12T19:35:45.043542+00:00"}
+  ],
+  "receipts": [
+    {"id":"19f377d5-2493-44d5-80f2-610f427a7e36","participant_id":"5c76a80c-5efb-4338-adb7-e1c69aa55922","cpf":"123.456.789-09","storage_path":"5c76a80c-5efb-4338-adb7-e1c69aa55922/1777638592002-2fc4e2bb-e2bf-4a1e-8458-4a103a0b96d5.jpg","status":"uploaded","amount_on_receipt":null,"cnpj_on_receipt":null,"rejection_reason":null,"codes_generated":null,"reviewed_by":null,"reviewed_at":null,"created_at":"2026-05-01T12:29:52.438366+00:00","updated_at":"2026-05-01T12:29:52.438366+00:00"}
+  ]
+}

@@ -12,14 +12,6 @@ create table participants (
   created_at    timestamptz not null default now()
 );
 
-create table codes (
-  id             uuid primary key default gen_random_uuid(),
-  participant_id uuid not null references participants(id) on delete cascade,
-  code           text not null unique,
-  created_at     timestamptz not null default now()
-);
-
-create index on codes (participant_id);
 create index on participants (cpf);
 create index on participants (code_count desc);
 
@@ -29,9 +21,14 @@ create table receipts (
   cpf             text not null,
   storage_path    text not null,
   status          text not null default 'uploaded'
-                    check (status in ('uploaded', 'validated', 'rejected', 'processed')),
+                    check (status in ('uploaded', 'processing', 'approved', 'rejected', 'needs_review')),
   amount_on_receipt  numeric(10, 2),
   cnpj_on_receipt    text,
+  receipt_number     text,
+  receipt_date       date,
+  ai_processed_at    timestamptz,
+  ai_confidence      text check (ai_confidence in ('high', 'medium', 'low', 'unreadable')),
+  ai_raw_response    jsonb,
   rejection_reason   text,
   codes_generated    integer,
   reviewed_by        text,
@@ -43,6 +40,17 @@ create table receipts (
 create index receipts_participant_id_idx on receipts(participant_id);
 create index receipts_cpf_idx on receipts(cpf);
 create index receipts_status_idx on receipts(status);
+create index receipts_dedupe_idx on receipts(receipt_number, receipt_date, cnpj_on_receipt);
+
+create table codes (
+  id             uuid primary key default gen_random_uuid(),
+  participant_id uuid not null references participants(id) on delete cascade,
+  receipt_id     uuid not null references receipts(id) on delete cascade,
+  code           text not null unique,
+  created_at     timestamptz not null default now()
+);
+
+create index on codes (participant_id);
 
 create table error_logs (
   id              uuid primary key default gen_random_uuid(),
