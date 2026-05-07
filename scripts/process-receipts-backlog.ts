@@ -45,10 +45,14 @@ if (stopRateIdx !== -1) {
 
 // --- Types ---
 
+// Note: Supabase JS client infers many-to-one embedded relations as arrays in TypeScript,
+// but PostgREST returns them as a single object at runtime for FK joins.
+// Verified empirically via curl against the live DB on 2026-05-07.
+// We cast to this type (via `as unknown as ReceiptRow[]`) to match actual runtime shape.
 type ReceiptRow = {
   id: string
   participant_id: string
-  participants: { nickname: string }[] | null
+  participants: { nickname: string } | null
 }
 
 type ErrorEntry = {
@@ -121,8 +125,8 @@ async function main(): Promise<void> {
   }
 
   const receipts: ReceiptRow[] = limit !== null
-    ? (allReceipts as ReceiptRow[]).slice(0, limit)
-    : (allReceipts as ReceiptRow[])
+    ? (allReceipts as unknown as ReceiptRow[]).slice(0, limit)
+    : (allReceipts as unknown as ReceiptRow[])
 
   const total = receipts.length
 
@@ -147,7 +151,7 @@ async function main(): Promise<void> {
 
   for (let i = 0; i < receipts.length; i++) {
     const receipt = receipts[i]
-    const nickname = receipt.participants?.[0]?.nickname ?? 'unknown'
+    const nickname = receipt.participants?.nickname ?? 'unknown'
 
     console.log(`[${i + 1}/${total}] Processing ${receipt.id} (${nickname})...`)
 
