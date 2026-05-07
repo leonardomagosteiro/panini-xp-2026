@@ -296,7 +296,7 @@ function CadastroForm() {
       return
     }
 
-    if (!nickname.trim() || !fullName.trim() || !whatsapp.trim()) {
+    if (!nickname.trim() || !fullName.trim() || !whatsapp.trim() || !email.trim()) {
       setError('Preencha todos os campos obrigatorios.')
       return
     }
@@ -464,11 +464,12 @@ function CadastroForm() {
                   required
                 />
                 <InputField
-                  label="E-mail (opcional)"
+                  label="E-mail"
                   value={email}
                   onChange={setEmail}
                   type="email"
                   placeholder="seu@email.com"
+                  required
                 />
               </div>
             </div>

@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
   if (body.mode === 'new') {
     const { nickname, full_name, cpf, whatsapp, email, store_origin, lgpd_consent } = body
 
-    if (!nickname || !full_name || !cpf || !whatsapp || !lgpd_consent) {
+    if (!nickname || !full_name || !cpf || !whatsapp || !lgpd_consent || !email) {
       return NextResponse.json({ error: 'Preencha todos os campos obrigatorios' }, { status: 400 })
     }
 
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
         full_name,
         cpf,
         whatsapp,
-        email: email || null,
+        email: email.trim(),
         amount_spent: null,
         code_count: 0,
         store_origin: store_origin || null,
