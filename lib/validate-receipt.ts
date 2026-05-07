@@ -22,7 +22,7 @@ export type ValidationResult =
   | { status: 'rejected'; reason: RejectionReason }
   | { status: 'needs_review' }
 
-function normalizeCnpj(cnpj: string | null): string | null {
+export function normalizeCnpj(cnpj: string | null): string | null {
   if (cnpj === null) return null
   const digits = cnpj.replace(/\D/g, '')
   return digits.length > 0 ? digits : null
