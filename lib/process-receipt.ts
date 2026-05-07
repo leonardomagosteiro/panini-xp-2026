@@ -124,10 +124,10 @@ export async function processReceipt(
   const arrayBuffer = await imageData.arrayBuffer()
   const imageBase64 = Buffer.from(arrayBuffer).toString('base64')
 
-  // Condition 2 — Image too large for Anthropic API (5MB raw → ~6.7MB base64).
+  // Condition 2 — Image too large for Anthropic API (5MB hard limit measured on base64 string length
+  // itself, NOT raw image bytes — verified empirically 2026-05-07).
   // Check before calling extractReceipt to avoid a guaranteed API error and save cost.
-  // Threshold: 7MB in base64 chars to allow minor encoding overhead.
-  const BASE64_SIZE_LIMIT = 7 * 1024 * 1024
+  const BASE64_SIZE_LIMIT = 5 * 1024 * 1024
   if (imageBase64.length > BASE64_SIZE_LIMIT) {
     await supabase
       .from('receipts')
@@ -154,7 +154,7 @@ export async function processReceipt(
     // These are permanent failures — retrying won't help. Route to needs_review
     // so admin can inspect the image manually. Other errors (network, timeout)
     // keep the existing behavior: revert to uploaded so the receipt can be retried.
-    if (/could not process image|invalid image|unsupported image format/i.test(errMessage)) {
+    if (/could not process image|invalid image|unsupported image format|exceeds.*maximum|image too large/i.test(errMessage)) {
       await supabase
         .from('receipts')
         .update({
