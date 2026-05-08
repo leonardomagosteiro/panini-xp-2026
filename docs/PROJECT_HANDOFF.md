@@ -1,6 +1,6 @@
 # Panini XP 2026 — Living Project Handoff
 
-**Last updated:** Friday, May 8, 2026, 12:06pm Brazil time
+**Last updated:** Friday, May 8, 2026 — evening session
 **Status:** Rebuilt after Claude.ai chat context limit hit. Supersedes all prior handoffs.
 
 ---
@@ -94,6 +94,10 @@ In order: schema migration → Claude extractor → 8-rule validator → atomic 
 
 | Hash | Date | Subject |
 |---|---|---|
+| df8133f | 2026-05-08 | feat(upload): mention auto-resize in photo guidance section |
+| 7dafe11 | 2026-05-08 | feat(upload): integrate client-side resize into receipt upload flow |
+| c0da895 | 2026-05-08 | feat(upload): add browser-image-compression dependency and resize helper |
+| d018c7c | 2026-05-08 | docs: client-side image resize spec |
 | 319515e | 2026-05-08 | feat(upload): add photo guidance section with good/bad example images |
 | 42c672f | 2026-05-08 | feat(validator): route OCR-dependent rejections to needs_review while AI extraction is unreliable |
 | 8ec31c3 | 2026-05-08 | feat(ops): add rejection-recovery email blast script (used May 7 for 166 customers) |
@@ -124,6 +128,7 @@ In order: schema migration → Claude extractor → 8-rule validator → atomic 
 
 - Customer registration with mandatory email (LGPD-compliant, CPF-deduplicated)
 - Receipt upload with photo guidance (good/bad example images)
+- Client-side image resize before upload: files >= 2MB compressed to max 4MB JPEG at 1920px — handles oversized photos and HEIC (iPhone format) transparently. Built with `browser-image-compression`.
 - Auto-triggered AI processing on upload (Vercel `waitUntil`)
 - 8-rule validation (CNPJ match, amount min, date window, duplicate detection)
 - Code generation in `PXP-2026-XXXXX` format, atomic with uniqueness retry
@@ -145,9 +150,9 @@ In order: schema migration → Claude extractor → 8-rule validator → atomic 
 
 **Real fix:** Switch to OpenAI (decided May 8, paused awaiting their service stability)
 
-### Discovered today (May 8)
+### Discovered and fixed (May 8)
 
-**Customer photos exceeding 5MB base64 threshold.** Photos never reach the AI for extraction. **Not yet mitigated** — this is today's active build target (client-side image resize before upload).
+**Customer photos exceeding 5MB base64 threshold.** Fixed by client-side resize before upload (commits `c0da895`, `7dafe11`, `df8133f`). Photos >= 2MB are now compressed to max 4MB JPEG at 1920px before leaving the device. HEIC handled transparently.
 
 ### Outstanding customer commitments
 
@@ -256,29 +261,19 @@ Values stored in Apple Notes "Panini XP — Project Keys".
 
 ## 15. Last commit and branch state
 
-- **Last commit:** `319515e` — feat(upload): add photo guidance section with good/bad example images (May 8)
-- **Working tree:** clean, all pushed to `origin/main`
-- **No uncommitted work**
+- **Last commit:** `df8133f` — feat(upload): mention auto-resize in photo guidance section (May 8)
+- **Working tree:** clean (handoff update pending commit), all feature commits pushed to `origin/main`
+- **No uncommitted work** (except this handoff)
 
 ---
 
 ## 16. The exact next step (this session)
 
-**Plan the client-side image resize feature.** Write a spec at `docs/image-resize-spec.md` BEFORE opening Claude Code for implementation.
+**Client-side image resize — DONE.** Spec written (`docs/image-resize-spec.md`), implemented, tested (pending Leonardo's manual test on real phone), and pushed.
 
-Spec must cover:
-- Where in upload flow the resize happens (before API call)
-- Target dimensions and compression settings
-- Library choice (browser-native Canvas API vs `browser-image-compression`)
-- Behavior on already-small images (skip)
-- HEIC handling (iPhone format — needs conversion)
-- Failure modes (fallback vs block upload)
-- Update existing photo guidance to mention automatic resize
-- Testing strategy (oversized image, HEIC, small image)
+**Next:** OpenAI integration. Resume when their API stabilizes. Decision is final; only timing depends on their service.
 
 **In parallel:** Leonardo continues manual review of `needs_review` queue at `/admin/recibos-revisao`.
-
-**On hold:** OpenAI integration. Resume when their API stabilizes. Decision is final; only timing depends on their service.
 
 ---
 
@@ -352,6 +347,27 @@ Spec must cover:
 - OpenAI integration: decided, not yet built
 - 183 receipts in needs_review queue: Leonardo reviewing manually
 - 3 error receipts (`amount_total_brl` missing): still stuck at `uploaded`, need investigation
+- All items in section 18 remain open
+
+---
+
+### Friday May 8, 2026 — second session (Claude Code)
+
+**Context:** Picked up immediately after morning session. Spec for client-side image resize had just been written and committed.
+
+**Accomplished:**
+- Built client-side image resize feature in full per `docs/image-resize-spec.md`:
+  - Created `lib/resize-image.ts` — async helper using `browser-image-compression`, skips files < 2MB, targets 4MB/1920px JPEG at quality 0.85, retries at 0.7 if still over 4MB, throws Portuguese error otherwise
+  - Modified `app/enviar-recibo/page.tsx` — async file-change handler, "Otimizando foto..." loading state during resize, error display on failure, submit button disabled during resize; removed old 4.5MB hard block
+  - Added guidance bullet: "Nao se preocupe com o tamanho da foto — vamos otimizar automaticamente."
+- Three commits pushed: `c0da895`, `7dafe11`, `df8133f`
+- Updated this handoff
+
+**NOT TESTED** — Leonardo to run manual test cases from spec section 6 on real phone.
+
+**Outstanding at session end:**
+- Manual testing of resize (5 test cases in spec section 6) — Leonardo to run
+- OpenAI integration — decided, paused pending their service stability
 - All items in section 18 remain open
 
 ---
