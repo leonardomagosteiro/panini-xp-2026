@@ -1,6 +1,6 @@
 # Panini XP 2026 — Living Project Handoff
 
-**Last updated:** Friday, May 8, 2026, 11am Brazil time
+**Last updated:** Friday, May 8, 2026, 12:06pm Brazil time
 **Status:** Rebuilt after Claude.ai chat context limit hit. Supersedes all prior handoffs.
 
 ---
@@ -321,6 +321,38 @@ Spec must cover:
 - Claude.ai chats hit context limits — handoffs make recovery possible
 - Use the cheapest tool for the task: Terminal for inspection, Claude Code for code, Claude.ai for thinking
 - Plan before build: a written spec saves hours in implementation
+
+---
+
+## 20. Session log
+
+### Friday May 8, 2026 — morning session (Claude Code)
+
+**Context:** Picked up from May 7 evening where AI pipeline components 1–9 were shipped. Top outstanding item was the 60% CNPJ false-rejection rate.
+
+**Accomplished:**
+- Rebuilt this handoff document (PROJECT_HANDOFF.md) from scratch after Claude.ai chat hit context limit — established it as the living single source of truth
+- Added CLAUDE.md rule requiring handoff to be read at session start and updated at session end
+- Decided to switch AI extraction provider from Claude (Anthropic) to OpenAI — based on empirical finding of ~60% false-rejection rate on `invalid_cnpj` category from May 7 backlog run. OpenAI integration is paused today due to their service instability.
+- Routed all OCR-dependent rejection reasons (`not_a_receipt`, `invalid_cnpj`, `amount_too_low`, `date_out_of_window`) to `needs_review` instead of auto-rejecting — commit `42c672f`. Duplicate remains the only auto-rejection.
+- Reset 178 false-rejected receipts back to `uploaded` and re-ran the backlog processor. Result: 183 `needs_review`, 6 `approved` (codes sent automatically), 3 `duplicate` rejected, 3 errors (same pre-existing `amount_total_brl` missing field issue).
+- Added photo guidance section to `/enviar-recibo` — good/bad example images + checklist — after manual review revealed many customers were photographing only the QR code. Commit `319515e`.
+- Identified next problem to solve: customer photos exceeding 5MB base64 threshold never reach AI. Client-side resize before upload is the fix — spec to be written in parallel Claude.ai chat.
+
+**Decisions made this session:**
+- Switch to OpenAI for AI extraction (decision #14 in section 9)
+- OpenAI integration paused pending their service stability (decision #15)
+- Route OCR-dependent rejections to needs_review (decision #12)
+- Photo guidance on upload page (decision #13)
+- Client-side image resize before upload as next build target (decision #16)
+- Living handoff document as session protocol (decision #17)
+
+**Outstanding at session end:**
+- Client-side image resize spec: not yet written (next task in parallel Claude.ai chat)
+- OpenAI integration: decided, not yet built
+- 183 receipts in needs_review queue: Leonardo reviewing manually
+- 3 error receipts (`amount_total_brl` missing): still stuck at `uploaded`, need investigation
+- All items in section 18 remain open
 
 ---
 
