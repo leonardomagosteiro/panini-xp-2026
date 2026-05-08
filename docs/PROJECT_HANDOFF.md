@@ -1,6 +1,6 @@
 # Panini XP 2026 — Living Project Handoff
 
-**Last updated:** Friday, May 8, 2026 — evening session
+**Last updated:** Friday, May 8, 2026 — end of day (~evening, Brazil time)
 **Status:** Rebuilt after Claude.ai chat context limit hit. Supersedes all prior handoffs.
 
 ---
@@ -372,4 +372,24 @@ Values stored in Apple Notes "Panini XP — Project Keys".
 
 ---
 
-*End of handoff. Next update due at the end of this session.*
+### Friday May 8, 2026 — third session (Claude Code)
+
+**Context:** Picked up after second session. Client-side resize was built and pushed but untested on real devices. HEIC handling was assumed to work via `browser-image-compression` internals.
+
+**Accomplished:**
+- Discovered HEIC failure on Chrome: `browser-image-compression` fails to decode HEIC because Chrome has no native HEIC support — the library tried loading the file into an `<img>` element and got an `Event {type: 'error'}` back.
+- Diagnosed via `console.error` debug log added to the catch block (`cedd72b`).
+- Fixed by installing `heic2any` and adding an explicit HEIC-to-JPEG conversion step at the top of `resizeReceiptImage`, before passing to `browser-image-compression`. Detection checks both `file.type` and `file.name` extension to handle browsers that don't set MIME type on HEIC files. Commit `a29b7ee`.
+- Verified end-to-end in Chrome iPhone 14 Pro Max responsive view: HEIC photo selects, converts, previews correctly, no errors.
+- Removed debug `console.error` log after verification (`f809576`).
+
+**Commits this session:** `cedd72b`, `a29b7ee`, `f809576`
+
+**Outstanding at session end:**
+- Manual testing on a real iPhone (physical device, not responsive view) — NOT YET DONE
+- OpenAI integration — decided, paused pending their service stability
+- All items in section 18 remain open
+
+---
+
+*End of session. Next update due at the start of the next session.*
