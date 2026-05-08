@@ -1,7 +1,16 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import type { RejectionReason } from '@/lib/validate-receipt'
+const REJECTION_REASON_VALUES = [
+  'not_a_receipt',
+  'invalid_cnpj',
+  'amount_too_low',
+  'date_out_of_window',
+  'duplicate',
+  'unreadable',
+] as const
+
+type AdminRejectionReason = typeof REJECTION_REASON_VALUES[number]
 
 const BRAND = {
   yellow: '#FFD600',
@@ -47,7 +56,7 @@ type ActiveAction =
   | { receiptId: string; type: 'reject' }
   | { receiptId: string; type: 'reprocess' }
 
-const REJECTION_LABELS: Record<RejectionReason, string> = {
+const REJECTION_LABELS: Record<AdminRejectionReason, string> = {
   not_a_receipt: 'Nao e um recibo',
   invalid_cnpj: 'CNPJ invalido / loja nao participante',
   amount_too_low: 'Valor abaixo de R$50',
@@ -56,7 +65,7 @@ const REJECTION_LABELS: Record<RejectionReason, string> = {
   unreadable: 'Imagem ilegivel',
 }
 
-const REJECTION_REASONS = Object.keys(REJECTION_LABELS) as RejectionReason[]
+const REJECTION_REASONS = REJECTION_REASON_VALUES as readonly AdminRejectionReason[]
 
 function formatBrDate(iso: string): string {
   return new Intl.DateTimeFormat('pt-BR', {
@@ -114,7 +123,7 @@ export default function AdminRevisaoPage() {
 
   const [activeAction, setActiveAction] = useState<ActiveAction | null>(null)
   const [approveCount, setApproveCount] = useState('1')
-  const [rejectReason, setRejectReason] = useState<RejectionReason | ''>('')
+  const [rejectReason, setRejectReason] = useState<AdminRejectionReason | ''>('')
   const [reprocessEmail, setReprocessEmail] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
   const [actionError, setActionError] = useState('')
@@ -494,7 +503,7 @@ export default function AdminRevisaoPage() {
                   <label style={{ color: '#ccc', fontSize: 13 }}>Motivo da rejeicao</label>
                   <select
                     value={rejectReason}
-                    onChange={e => setRejectReason(e.target.value as RejectionReason)}
+                    onChange={e => setRejectReason(e.target.value as AdminRejectionReason)}
                     style={{ ...inputStyle }}
                   >
                     <option value="">Selecionar...</option>

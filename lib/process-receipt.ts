@@ -273,26 +273,8 @@ export async function processReceipt(
     const baseParams = { participantId, email, nickname, uploadDate }
 
     switch (validation.reason) {
-      case 'not_a_receipt':
-        await sendReceiptRejectedNotReceipt(baseParams)
-        break
-      case 'invalid_cnpj':
-        await sendReceiptRejectedInvalidCnpj(baseParams)
-        break
-      case 'amount_too_low':
-        await sendReceiptRejectedAmountTooLow({
-          ...baseParams,
-          amountBrl: extracted.amount_total_brl ?? 0,
-        })
-        break
-      case 'date_out_of_window':
-        await sendReceiptRejectedDateOutOfWindow(baseParams)
-        break
       case 'duplicate':
         await sendReceiptRejectedDuplicate(baseParams)
-        break
-      case 'unreadable':
-        await sendReceiptPleaseReupload(baseParams)
         break
     }
 
@@ -302,7 +284,14 @@ export async function processReceipt(
   // needs_review
   await supabase
     .from('receipts')
-    .update({ status: 'needs_review' })
+    .update({
+      status: 'needs_review',
+      ai_raw_response: {
+        _system_note: `ai_extraction_review_${validation.review_reason}`,
+        extracted,
+        skipped_at: new Date().toISOString(),
+      },
+    })
     .eq('id', receiptId)
 
   return { status: 'needs_review' }

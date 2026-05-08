@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-admin'
 import { validateAdminSession } from '@/lib/admin-auth'
-import { type RejectionReason } from '@/lib/validate-receipt'
 import {
   sendReceiptRejectedNotReceipt,
   sendReceiptRejectedInvalidCnpj,
@@ -11,14 +10,16 @@ import {
   sendReceiptPleaseReupload,
 } from '@/lib/send-receipt-emails'
 
-const VALID_REASONS: RejectionReason[] = [
+const VALID_REASONS = [
   'not_a_receipt',
   'invalid_cnpj',
   'amount_too_low',
   'date_out_of_window',
   'duplicate',
   'unreadable',
-]
+] as const
+
+type AdminRejectionReason = typeof VALID_REASONS[number]
 
 export async function POST(
   req: NextRequest,
@@ -28,10 +29,10 @@ export async function POST(
     return NextResponse.json({ error: 'Nao autorizado' }, { status: 401 })
   }
 
-  const body = await req.json() as { reason?: RejectionReason }
+  const body = await req.json() as { reason?: AdminRejectionReason }
   const reason = body.reason
 
-  if (!reason || !VALID_REASONS.includes(reason)) {
+  if (!reason || !(VALID_REASONS as readonly string[]).includes(reason)) {
     return NextResponse.json({ error: 'Motivo invalido' }, { status: 400 })
   }
 
