@@ -387,7 +387,8 @@ function EnviarReciboForm() {
                     <li>Número do cupom</li>
                   </ul>
                   <p style={{ margin: '0 0 6px' }}>⚠️ Não envie apenas o QR Code. Precisamos do recibo inteiro.</p>
-                  <p style={{ margin: 0, color: '#888' }}>Dica: se o recibo for muito longo, tire a foto em boa luz e mantenha a câmera reta.</p>
+                  <p style={{ margin: '0 0 6px', color: '#888' }}>Dica: se o recibo for muito longo, tire a foto em boa luz e mantenha a câmera reta.</p>
+                  <p style={{ margin: 0, color: '#888' }}>Não se preocupe com o tamanho da foto — vamos otimizar automaticamente.</p>
                 </div>
               </div>
 
