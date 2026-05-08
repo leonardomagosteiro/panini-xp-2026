@@ -92,3 +92,14 @@ DEFERRED (not tonight):
 - Show loading states during all form submissions
 - All error messages must be in Brazilian Portuguese
 - Keep components simple — this is a non-technical founder's project
+
+## Project Handoff Document
+
+The single source of truth for project state across sessions is `docs/PROJECT_HANDOFF.md`.
+
+**Required behavior:**
+- At the start of every session, read `docs/PROJECT_HANDOFF.md` in full before doing any work
+- Whenever a meaningful decision is made, an error is solved, or a feature is shipped, update the relevant section of the handoff
+- At the end of every session, update the handoff with progress made, decisions, errors solved, and new outstanding items — then commit and push
+- Never let the handoff go stale. A stale handoff is worse than none.
+- Keep the "Last updated" line at the top of the file accurate
