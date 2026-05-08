@@ -2,6 +2,26 @@
 
 This is a running list of items we deliberately deferred during the foundation build (May 7, 2026). Each item was acknowledged and consciously parked to ship faster. None are blockers; all should be revisited within 30 days of going live.
 
+## Outstanding from May 7, 2026 build session
+
+### Critical — must address before weekend
+- **AI extraction unreliability on CNPJ**: 60% sample false-rejection rate on invalid_cnpj category. Tata's receipt (id e1dff659) had clearly visible CNPJ that AI misread. Decision pending: fuzzy-match in current pipeline OR switch to OpenAI provider. 30-min comparison test scheduled for tomorrow morning before deciding.
+- **Outstanding promise to 166 customers**: rejection recovery emails sent today saying "we'll manually review your receipt." Need to actually re-process these receipts and send follow-up emails with the verified result.
+
+### High priority
+- **Reprocess all 198 rejected receipts** through whichever extraction approach wins (fuzzy-match or OpenAI). Use scripts/process-receipts-backlog.ts pattern but query rejected receipts with ai-extracted CNPJs close to valid ones.
+- **122 receipts in needs_review queue** waiting for manual review via the admin page
+
+### Medium priority
+- Move ADMIN_PASSWORD from hardcoded 'panini2026' to env var (currently fine since Leonardo is the only user)
+- Investigate the 3 receipts that errored on "AI response missing required fields: amount_total_brl"
+
+### Process learnings from today
+- TypeScript inference for Supabase JS embedded relations is unreliable — verify shape empirically via curl
+- Anthropic vision API "5MB limit" is base64 string length, not raw bytes (verified empirically)
+- Rate limit: Resend free tier was 100/day, hit during heavy traffic, upgraded mid-day
+- ALL_HANDS lesson: when reality contradicts your math, add observability before fixing
+
 ## Validation engine (Component 4)
 
 - **CNPJ null handling in Step 3** — if AI returns `cnpj: null`, validator rejects as `'invalid_cnpj'`. Customer email will say "the CNPJ from the store isn't part of our campaign," which sounds wrong if no CNPJ was extracted at all. In practice, null CNPJ usually means low confidence (already routed to `needs_review` in Step 2), so this rarely fires. Possible fixes: add `'cnpj_missing'` rejection reason, or route null-CNPJ to `needs_review` instead.
