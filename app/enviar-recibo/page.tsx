@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Image from 'next/image'
+import { resizeReceiptImage } from '@/lib/resize-image'
 
 const BRAND = {
   yellow: '#FFD600',
@@ -52,6 +53,7 @@ function EnviarReciboForm() {
 
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [resizing, setResizing] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -158,25 +160,31 @@ function EnviarReciboForm() {
     }
   }
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     setError('')
     const file = e.target.files?.[0]
     if (!file) return
 
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']
-    if (!allowedTypes.includes(file.type)) {
+    if (!allowedTypes.includes(file.type) && !file.type.startsWith('image/')) {
       setError('Formato invalido. Use JPEG, PNG ou WebP.')
       return
     }
 
-    if (file.size > 4.5 * 1024 * 1024) {
-      setError('Arquivo muito grande. Tamanho maximo: 4.5MB.')
-      return
-    }
-
-    setSelectedFile(file)
+    setResizing(true)
+    setSelectedFile(null)
     if (previewUrl) URL.revokeObjectURL(previewUrl)
-    setPreviewUrl(URL.createObjectURL(file))
+    setPreviewUrl(null)
+
+    try {
+      const resized = await resizeReceiptImage(file)
+      setSelectedFile(resized)
+      setPreviewUrl(URL.createObjectURL(resized))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Não foi possível otimizar a foto. Tente uma foto diferente.')
+    } finally {
+      setResizing(false)
+    }
   }
 
   async function handleUpload(e: React.FormEvent) {
@@ -391,7 +399,23 @@ function EnviarReciboForm() {
                 style={{ display: 'none' }}
               />
 
-              {!previewUrl ? (
+              {resizing ? (
+                <div
+                  style={{
+                    width: '100%',
+                    padding: '32px 16px',
+                    borderRadius: 10,
+                    border: '2px dashed #444',
+                    backgroundColor: '#1a1a1a',
+                    color: '#aaa',
+                    fontSize: 15,
+                    textAlign: 'center',
+                    lineHeight: 1.6,
+                  }}
+                >
+                  Otimizando foto...
+                </div>
+              ) : !previewUrl ? (
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
@@ -453,10 +477,10 @@ function EnviarReciboForm() {
               type="submit"
               style={{
                 ...buttonStyle,
-                backgroundColor: loading || !selectedFile ? '#555' : BRAND.yellow,
-                cursor: loading || !selectedFile ? 'not-allowed' : 'pointer',
+                backgroundColor: loading || resizing || !selectedFile ? '#555' : BRAND.yellow,
+                cursor: loading || resizing || !selectedFile ? 'not-allowed' : 'pointer',
               }}
-              disabled={loading || !selectedFile}
+              disabled={loading || resizing || !selectedFile}
             >
               {loading ? 'Enviando...' : 'Enviar Recibo'}
             </button>
