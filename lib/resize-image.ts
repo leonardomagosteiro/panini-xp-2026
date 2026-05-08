@@ -36,6 +36,7 @@ export async function resizeReceiptImage(file: File): Promise<File> {
     if (err instanceof Error && err.message.startsWith('Não foi possível')) {
       throw err
     }
+    console.error('[resize-image] underlying error:', err)
     throw new Error('Não foi possível otimizar a foto. Tente uma foto diferente.')
   }
 }
