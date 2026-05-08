@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { waitUntil } from '@vercel/functions'
 import { createAdminClient } from '@/lib/supabase-admin'
+import { processReceipt } from '@/lib/process-receipt'
 import { logError } from '@/lib/log-error'
 import { randomUUID } from 'crypto'
 import { Resend } from 'resend'
@@ -76,14 +78,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Erro ao enviar foto. Tente novamente.' }, { status: 500 })
     }
 
-    const { error: insertError } = await supabase.from('receipts').insert({
+    const { data: insertData, error: insertError } = await supabase.from('receipts').insert({
       participant_id: participant.id,
       cpf,
       storage_path: storagePath,
       status: 'uploaded',
-    })
+    }).select('id').single()
 
-    if (insertError) {
+    if (insertError || insertData === null) {
       await logError('upload-recibo', 'Receipt insert failed', {
         cpf,
         participant_id: participant.id,
@@ -115,6 +117,8 @@ export async function POST(req: NextRequest) {
         })
       }
     }
+
+    waitUntil(processReceipt(insertData.id, supabase))
 
     return NextResponse.json({ success: true })
   } catch (err) {
