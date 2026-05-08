@@ -340,6 +340,49 @@ function EnviarReciboForm() {
                 Tire uma foto do seu recibo de compra ou selecione da galeria. O recibo precisa estar legivel.
               </p>
 
+              {/* PHOTO GUIDANCE */}
+              <div style={{ marginBottom: 24 }}>
+                <p style={{ color: BRAND.yellow, fontSize: 13, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12 }}>
+                  Como tirar a foto certa
+                </p>
+
+                <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
+                  <div style={{ flex: 1, textAlign: 'center' }}>
+                    <img
+                      src="/upload-good-example.jpg"
+                      alt="Recibo completo"
+                      style={{ width: '100%', borderRadius: 8, border: '2px solid #2a7a2a', display: 'block' }}
+                    />
+                    <p style={{ color: '#4ade80', fontSize: 12, fontWeight: 600, margin: '6px 0 0' }}>
+                      ✅ Recibo completo
+                    </p>
+                  </div>
+                  <div style={{ flex: 1, textAlign: 'center' }}>
+                    <img
+                      src="/upload-bad-example.jpg"
+                      alt="Apenas QR Code"
+                      style={{ width: '100%', borderRadius: 8, border: '2px solid #7a2a2a', display: 'block' }}
+                    />
+                    <p style={{ color: '#ff6b6b', fontSize: 12, fontWeight: 600, margin: '6px 0 0' }}>
+                      ❌ Apenas QR Code
+                    </p>
+                  </div>
+                </div>
+
+                <div style={{ backgroundColor: '#1a1a1a', borderRadius: 10, padding: '14px 16px', fontSize: 13, lineHeight: 1.8, color: '#ccc' }}>
+                  <p style={{ margin: '0 0 8px' }}>📸 Para registrar seu recibo, a foto precisa mostrar:</p>
+                  <ul style={{ margin: '0 0 10px', paddingLeft: 20 }}>
+                    <li>CNPJ da loja</li>
+                    <li>Razão social</li>
+                    <li>Data da compra</li>
+                    <li>Valor total</li>
+                    <li>Número do cupom</li>
+                  </ul>
+                  <p style={{ margin: '0 0 6px' }}>⚠️ Não envie apenas o QR Code. Precisamos do recibo inteiro.</p>
+                  <p style={{ margin: 0, color: '#888' }}>Dica: se o recibo for muito longo, tire a foto em boa luz e mantenha a câmera reta.</p>
+                </div>
+              </div>
+
               <input
                 ref={fileInputRef}
                 type="file"
