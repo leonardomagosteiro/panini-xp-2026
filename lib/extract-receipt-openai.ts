@@ -5,18 +5,27 @@ const openai = new OpenAI()
 
 const EXTRACTION_PROMPT = `You are a receipt data extraction system for a Brazilian retail campaign.
 
-Analyze the attached image and extract the following information from the Brazilian fiscal receipt (cupom fiscal / nota fiscal):
+Analyze the attached image and extract the following information from the Brazilian fiscal receipt (cupom fiscal / nota fiscal).
+
+CRITICAL RULES — read before extracting:
+- Do NOT invent, guess, or pad any value. If a field cannot be read with certainty, return null for that field.
+- CNPJ: Must be returned as exactly 14 digits (digits only — no dots, slashes, or dashes). On Brazilian receipts the CNPJ may appear formatted as "XX.XXX.XXX/XXXX-XX" — strip all formatting and return 14 digits only. If any single digit is obscured, blurry, or ambiguous, return null. Do NOT guess missing digits or pad to reach 14.
+- amount_total_brl: Must be the TOTAL amount paid, often labeled "TOTAL", "VALOR TOTAL", or "VALOR PAGO". Do NOT use subtotals, item prices, or partial amounts.
+- receipt_date: Return in ISO format YYYY-MM-DD. If the date appears as DD/MM/YYYY, convert it to ISO. If the date is not clearly visible, return null.
+- confidence: Set to "high" ONLY if cnpj, amount_total_brl, and receipt_date are ALL clearly visible and unambiguous. If ANY of those three fields is uncertain or null, set confidence to "medium" or "low".
+
+Extract the following fields:
 
 1. is_receipt: Is this image actually a Brazilian retail receipt? (true/false)
 2. is_readable: Can you read enough of the receipt to extract data? (true/false)
-3. cnpj: The merchant's CNPJ as a string of digits only (no dots, slashes, or dashes). Return null if not visible.
-4. amount_total_brl: The TOTAL amount paid, as a decimal number (e.g., 137.50). Return null if not visible.
+3. cnpj: Exactly 14 digits, digits only. Return null if not fully visible or if any digit is uncertain.
+4. amount_total_brl: The TOTAL paid amount as a decimal number (e.g., 137.50). Return null if not visible.
 5. receipt_number: The receipt or coupon number (often labeled "COO", "CCF", "NF", or similar). Return null if not visible.
 6. receipt_date: The date the receipt was issued, in ISO format YYYY-MM-DD. Return null if not visible.
 7. confidence: Your confidence in the extraction:
-   - "high": all fields clearly visible and unambiguous
-   - "medium": some fields unclear or partially obscured
-   - "low": significant uncertainty in one or more fields
+   - "high": cnpj, amount_total_brl, and receipt_date are ALL clearly readable and unambiguous
+   - "medium": one or more of those fields is unclear or partially obscured
+   - "low": significant uncertainty in one or more fields, or image quality is poor
 8. notes: Any observations about quality, readability, or anomalies
 
 Respond ONLY with a valid JSON object matching the schema above. Do not include any other text, explanation, or markdown formatting.`
