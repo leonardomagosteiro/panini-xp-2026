@@ -284,3 +284,78 @@ Equipe Panini XP`
     })
   }
 }
+
+// Email H — Re-upload request (admin-triggered, better photo needed)
+export async function sendReceiptReuploadRequest(params: {
+  participantId: string
+  email: string
+  nickname: string
+  uploadDate: string
+}): Promise<void> {
+  const text = `Olá, ${params.nickname}!
+
+Recebemos seu recibo, mas a imagem não está nítida o suficiente para identificarmos as informações.
+
+Para que você possa receber seu(s) código(s), por favor envie uma nova foto do mesmo recibo. Para uma boa leitura:
+
+📸 Iluminação clara, sem sombras
+📸 Recibo plano, sem dobras
+📸 Todos os cantos visíveis
+📸 Texto legível na foto
+
+👉 ${REUPLOAD_URL}
+
+Equipe Panini XP`
+
+  try {
+    const resend = new Resend(process.env.RESEND_API_KEY)
+    await resend.emails.send({
+      from: FROM,
+      replyTo: REPLY_TO,
+      to: params.email,
+      subject: 'Precisamos de uma foto melhor — Panini XP',
+      text,
+    })
+  } catch (err) {
+    await logError('send-receipt-emails', 'Failed to send reupload-request email', {
+      participant_id: params.participantId,
+      email: params.email,
+      error: String(err),
+    })
+  }
+}
+
+// Email I — Manual review notification (receipt under human review)
+export async function sendReceiptManualReviewNotification(params: {
+  participantId: string
+  email: string
+  nickname: string
+  uploadDate: string
+}): Promise<void> {
+  const text = `Olá, ${params.nickname}!
+
+Recebemos seu recibo. Como a imagem precisa de uma análise mais cuidadosa, nosso time vai revisar manualmente em até 48 horas úteis.
+
+Vamos te avisar por email assim que terminarmos. Se aprovado, você receberá seu(s) código(s).
+
+Obrigado pela paciência!
+
+Equipe Panini XP`
+
+  try {
+    const resend = new Resend(process.env.RESEND_API_KEY)
+    await resend.emails.send({
+      from: FROM,
+      replyTo: REPLY_TO,
+      to: params.email,
+      subject: 'Estamos analisando seu recibo — Panini XP',
+      text,
+    })
+  } catch (err) {
+    await logError('send-receipt-emails', 'Failed to send manual-review-notification email', {
+      participant_id: params.participantId,
+      email: params.email,
+      error: String(err),
+    })
+  }
+}
