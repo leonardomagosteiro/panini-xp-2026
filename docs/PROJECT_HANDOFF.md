@@ -1,6 +1,6 @@
 # Panini XP 2026 — Living Project Handoff
 
-**Last updated:** Saturday, May 9, 2026, mid-afternoon Brazil time
+**Last updated:** Saturday, May 9, 2026, late evening Brazil time
 **Status:** Rebuilt after Claude.ai chat context limit hit. Supersedes all prior handoffs.
 
 ---
@@ -190,6 +190,11 @@ In order: schema migration → Claude extractor → 8-rule validator → atomic 
 | 21 | Upload confirmation email removed entirely | No email at upload time — only state-change emails fire | 2026-05-09 | Audit revealed it contradicted downstream emails. Principle: email = real news. |
 | 22 | Three Phase 1 blast scripts archived | scripts/_archived/ with README; tsconfig.json excludes the directory | 2026-05-09 | Landmines (no idempotency, contradictions); preserved git history |
 | 23 | Email communication audit completed | docs/email-communication-audit.md is the single source of truth on email touchpoints | 2026-05-09 | Surfaced 10 issues; addressed HIGH severity today; rest queued |
+| 24 | Schema changes require explicit DB constraint verification | When adding a new enum-like status value, always inspect CHECK constraints in Supabase before shipping. Claude Code earlier said "no migration needed" for awaiting_reupload — wrong. The CHECK constraint blocked every write silently. Future process: ALTER TABLE + verify in Supabase SQL editor before code ships. | 2026-05-09 | Production incident: 5 receipts stuck, 3 customers got Email H but no DB update |
+| 25 | Resolve scripts use cached ai_raw_response (no fresh OpenAI calls) | resolve-stuck-receipts.ts and apply-not-a-receipt-rejection.ts both replay validation logic against stored ai_raw_response rather than re-calling OpenAI. Ensures deterministic, reproducible outcomes; avoids cost and variance on recovery operations. | 2026-05-09 | Principle: recovery operations should be cheap and predictable |
+| 26 | Email I duplicate prevention via manual_review_email_sent_at | Added receipts.manual_review_email_sent_at TIMESTAMPTZ. sendManualReviewEmailOnce() helper in process-receipt.ts checks the column before sending and writes it after. Pattern: fire-once emails use a dedicated timestamp column as an idempotency guard. | 2026-05-09 | Without the guard, every reanalysis run re-sent Email I to already-notified customers |
+| 27 | Auto-reject scope: only is_receipt=false at confidence=high | Other rejection reasons (invalid_cnpj, amount_too_low, date_out_of_window) still route to needs_review. Each requires individual safety analysis before auto-rejection can be trusted. Only is_receipt=false at high confidence is unambiguous enough to act on without human review. | 2026-05-09 | Safety-first: wrong auto-rejection hurts real customers |
+| 28 | Email B copy: single message for both auto-rejection and admin manual rejection | Rewritten with full receipt field list, QR-only warning, finality tone. Works for both contexts because it focuses on what the customer must do next, not what decision was made. Finality tone (Nao foi possivel processar) distinguishes from Email H (hopeful, same receipt). | 2026-05-09 | Audit finding: same email fired from two paths, must work for both |
 
 ---
 
@@ -211,8 +216,11 @@ In order: schema migration → Claude extractor → 8-rule validator → atomic 
 
 **Table: `receipts`** — uploaded receipt records
 - id, participant_id (FK), cpf, image_path
-- status: `uploaded` | `processing` | `approved` | `rejected` | `needs_review`
+- status: `uploaded` | `processing` | `approved` | `rejected` | `needs_review` | `awaiting_reupload`
+- `receipts_status_check` CHECK constraint includes all 6 values above (constraint fix applied May 9 evening — `awaiting_reupload` was missing, causing a silent production incident)
 - AI columns (May 7): receipt_number, receipt_date, ai_processed_at, ai_confidence, ai_raw_response (jsonb), reviewed_at, reviewed_by, rejection_reason, cnpj_on_receipt, amount_total_brl
+- reupload_request_sent_at TIMESTAMPTZ (May 9) — tracks first/second strike detection
+- manual_review_email_sent_at TIMESTAMPTZ (May 9) — guards Email I against duplicate sends
 - Dedupe index on (receipt_number, receipt_date, cnpj_on_receipt)
 
 **Table: `codes`** — generated sweepstakes codes
@@ -310,9 +318,13 @@ Values stored in Apple Notes "Panini XP — Project Keys".
 - No registration confirmation email (separate from receipt confirmation)
 - Phase 1 brief still says 5 kiosks — actual is 8
 - Test 2 (second-strike detection) — built but never verified end-to-end
-- Reanalysis Email I duplicate guard (Issue 3 from audit) — needed before next reanalysis batch
-- Dead imports in process-receipt.ts (Issue 4) — cleanup
+- Dead imports in process-receipt.ts (Issue 4 from audit) — cleanup (sendReceiptRejectedNotReceipt is now wired; remaining dead imports: sendReceiptRejectedInvalidCnpj, sendReceiptRejectedAmountTooLow, sendReceiptRejectedDateOutOfWindow, sendReceiptPleaseReupload)
 - Issues 8-10 from audit — low severity, future cleanup
+- Orchestrator silent error swallowing pattern — DB write errors in non-awaiting_reupload paths are still discarded (no error check on update result). Risk: any future schema mismatch, RLS policy change, or DB anomaly would cause silent failures identical to the May 9 constraint incident. Fix: add error handling to all DB writes in process-receipt.ts.
+- 244 needs_review receipts still in queue — require manual processing or additional auto-reject rules. apply-not-a-receipt-rejection.ts dry-run found 0 matches — existing queue has no high-confidence is_receipt=false cases.
+- 63 awaiting_reupload receipts will silently transition to needs_review after 7-day timeout cron if no customer re-upload — expected and by design, but worth monitoring.
+- schema.sql sync verification — CHECK constraint fix (awaiting_reupload added) was applied directly in Supabase SQL editor; not captured in any migration file. Sync schema.sql if one is being maintained.
+- CLAUDE.md still describes pre-Phase 2 scope — does not reflect awaiting_reupload, Email H/I, manual_review_email_sent_at, or auto-reject logic
 
 ---
 
@@ -330,6 +342,79 @@ Values stored in Apple Notes "Panini XP — Project Keys".
 ---
 
 ## 20. Session log
+
+### Saturday May 9, 2026 — EVENING — production incident + Phase 2.6 cleanup (Claude Code)
+
+**Context:** Followed directly after the afternoon session. Three areas of work: diagnosing and resolving a production incident (stuck receipts), adding an Email I duplicate guard, and shipping the auto-reject rule for clearly-invalid uploads.
+
+**1. Production incident: stuck receipts root cause found and resolved**
+
+Phase A diagnostic found 5 receipts stuck in `status='processing'` with `ai_processed_at` set — meaning AI ran successfully but the final DB write never committed. Root cause: `receipts_status_check` CHECK constraint did not include `awaiting_reupload` as an allowed value. When the orchestrator tried to write `status='awaiting_reupload'`, the DB silently rejected it (no error handling on the update call), Email H was sent anyway, and the receipt remained in `processing` forever.
+
+**Process learning (important):** Claude Code earlier in the May 9 afternoon session said "no migration needed" when the `awaiting_reupload` status value was added — this was wrong. The CHECK constraint must be explicitly updated whenever a new enum-like status value is added. Future process: before shipping any new status value, run `SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'receipts_status_check'` in Supabase SQL editor and update the constraint explicitly.
+
+**Constraint fix SQL (applied by Leonardo in Supabase SQL editor):**
+```sql
+ALTER TABLE receipts DROP CONSTRAINT receipts_status_check;
+ALTER TABLE receipts ADD CONSTRAINT receipts_status_check
+  CHECK (status IN ('uploaded','processing','approved','rejected','needs_review','awaiting_reupload'));
+```
+
+**resolve-stuck-receipts.ts execution outcome (commit 080d23e):**
+- Ran `--dry-run` first → confirmed all 5 receipts would route to `awaiting_reupload` (Pre-check 0: cnpj=null)
+- Ran `--apply` after constraint fix → 5 receipts resolved; 3 real customers (Victor, Denis, Davizim12) received Email H; 2 LeoQATester rows resolved silently (no email, no email on file)
+- Second-strike detection verified working: all 5 were first strikes, no second-strike case triggered (expected)
+
+**2. Email I duplicate guard**
+
+Added `receipts.manual_review_email_sent_at TIMESTAMPTZ` column. Extracted `sendManualReviewEmailOnce()` helper in `lib/process-receipt.ts` — checks the column before sending Email I, writes the timestamp after. Covers all 4 Email I call sites: image_too_large, image_unprocessable, second_unreadable_upload, and main needs_review fallthrough. Commit `8b7c567`.
+
+**Backfill SQL for previously-notified receipts (run by Leonardo in Supabase SQL editor before second reanalysis):**
+```sql
+UPDATE receipts
+SET manual_review_email_sent_at = ai_processed_at
+WHERE status = 'needs_review'
+  AND ai_processed_at IS NOT NULL
+  AND manual_review_email_sent_at IS NULL;
+```
+Applied to 246 needs_review receipts. Prevents Email I re-send on future reanalysis runs.
+
+**3. Second reanalysis run**
+
+Ran `npx tsx scripts/reanalyze-needs-review.ts --apply` against 255 needs_review receipts.
+- 4 approved (codes sent, Email A fired)
+- 59 routed to `awaiting_reupload` (Email H sent — these were the null-CNPJ cases now correctly reaching the awaiting_reupload branch after the constraint fix)
+- 192 still in needs_review
+- 0 errors
+- Cost: ~$2.55, runtime: ~28 minutes
+
+**4. Auto-reject for is_receipt=false at high confidence (commit 4c1c1b3)**
+
+Modified `lib/validate-receipt.ts` Step 1: when `is_receipt=false AND confidence=high`, return `{ status: 'rejected', reason: 'not_a_receipt' }` instead of routing to needs_review. Medium/low confidence still goes to needs_review.
+Added `'not_a_receipt'` to `RejectionReason` type.
+Wired `sendReceiptRejectedNotReceipt` (Email B) in the orchestrator's rejected branch for this case.
+Scope: only is_receipt=false at high confidence. Other rejection reasons (invalid_cnpj, amount_too_low, date_out_of_window) deferred — each needs individual safety analysis before auto-rejection.
+
+**5. Email B copy rewrite (commit caba829)**
+
+Updated `sendReceiptRejectedNotReceipt` body with: required fields list (CNPJ, razão social, date, total, cupom number), QR-only warning, photo quality guidance. Finality tone ("Não foi possível processar") distinguishes from Email H's hopeful tone ("Precisamos de uma foto melhor"). Single message works for both auto-rejection and admin manual rejection paths.
+
+**6. apply-not-a-receipt-rejection.ts cleanup script (commit 1cda2c7)**
+
+Created one-off script to apply the new auto-reject rule to the 192 existing needs_review receipts using cached ai_raw_response (no fresh OpenAI calls). Handles both flat and nested ai_raw_response shapes.
+
+Dry-run result: **0 matches** — no existing needs_review receipt has `is_receipt=false AND confidence=high`. The queue's not_a_receipt cases are all medium/low confidence. Script is valid for future use but the immediate backfill is a no-op.
+
+**Commits this session:**
+- `080d23e` feat(ops): add resolve-stuck-receipts script for timeout recovery
+- `8b7c567` feat(orchestrator): guard Email I against duplicates via manual_review_email_sent_at
+- `4c1c1b3` feat(validator): auto-reject when is_receipt is false at high confidence
+- `caba829` fix(emails): update Email B body with detailed guidance and finality tone
+- `1cda2c7` feat(ops): add apply-not-a-receipt-rejection cleanup script
+
+**Status at session end:** Production incident resolved. Email I deduplication live. Auto-reject for clear non-receipts live. 244 needs_review receipts remain for manual processing or future auto-reject expansion.
+
+---
 
 ### Friday May 8, 2026 — morning session (Claude Code)
 
