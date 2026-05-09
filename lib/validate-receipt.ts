@@ -9,7 +9,7 @@ const VALID_CNPJS = new Set([
   '07348198000148',
 ])
 
-export type RejectionReason = 'duplicate'
+export type RejectionReason = 'duplicate' | 'not_a_receipt'
 
 export type ReviewReason =
   | 'not_a_receipt'
@@ -75,6 +75,9 @@ export async function validateReceipt(
 
   // Step 1 — not a receipt
   if (!extracted.is_receipt) {
+    if (extracted.confidence === 'high') {
+      return { status: 'rejected', reason: 'not_a_receipt' }
+    }
     return { status: 'needs_review', review_reason: 'not_a_receipt' }
   }
 

@@ -316,6 +316,9 @@ export async function processReceipt(
       case 'duplicate':
         await sendReceiptRejectedDuplicate(baseParams)
         break
+      case 'not_a_receipt':
+        await sendReceiptRejectedNotReceipt({ participantId, email, nickname, uploadDate })
+        break
     }
 
     return { status: 'rejected', reason: validation.reason }
