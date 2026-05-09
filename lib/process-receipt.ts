@@ -13,6 +13,7 @@ import {
   sendReceiptRejectedDuplicate,
   sendReceiptPleaseReupload,
   sendReceiptReuploadRequest,
+  sendReceiptManualReviewNotification,
 } from './send-receipt-emails'
 
 export type ProcessResult =
@@ -144,6 +145,7 @@ export async function processReceipt(
         },
       })
       .eq('id', receiptId)
+    await sendReceiptManualReviewNotification({ participantId, email, nickname, uploadDate })
     return { status: 'needs_review' }
   }
 
@@ -173,6 +175,7 @@ export async function processReceipt(
           },
         })
         .eq('id', receiptId)
+      await sendReceiptManualReviewNotification({ participantId, email, nickname, uploadDate })
       return { status: 'needs_review' }
     }
 
@@ -304,11 +307,12 @@ export async function processReceipt(
       priorReceipt.reupload_request_sent_at !== null
 
     if (isSecondStrike) {
-      // Case A — second unreadable upload: route to needs_review silently (Email I comes in Task 5)
+      // Case A — second unreadable upload: route to needs_review, notify customer
       await supabase
         .from('receipts')
         .update({ status: 'needs_review', rejection_reason: null })
         .eq('id', receiptId)
+      await sendReceiptManualReviewNotification({ participantId, email, nickname, uploadDate })
       return { status: 'needs_review', review_reason: 'second_unreadable_upload' }
     } else {
       // Case B — first unreadable upload: ask customer to re-upload
@@ -337,5 +341,6 @@ export async function processReceipt(
     })
     .eq('id', receiptId)
 
+  await sendReceiptManualReviewNotification({ participantId, email, nickname, uploadDate })
   return { status: 'needs_review' }
 }
