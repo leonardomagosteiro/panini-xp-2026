@@ -67,9 +67,20 @@ export async function sendReceiptRejectedNotReceipt(params: {
   const prefix = params.isDelayedAnalysis ? 'Recebemos seu recibo há alguns dias e finalizamos a análise agora.\n\n' : ''
   const text = `${prefix}Olá, ${params.nickname}!
 
-Recebemos seu envio, mas não conseguimos identificar uma nota fiscal válida na imagem.
+Não foi possível processar seu envio — a imagem não contém uma nota fiscal válida ou as informações necessárias.
 
-Por favor, envie uma foto clara do seu cupom fiscal ou nota fiscal de compra:
+Para receber seu(s) código(s), envie uma nova foto do recibo inteiro com:
+
+📌 CNPJ da loja
+📌 Razão social
+📌 Data da compra
+📌 Valor total
+📌 Número do cupom
+
+⚠️ Não envie apenas o QR Code — ele não é suficiente. Precisamos do recibo inteiro.
+
+📸 Para uma boa leitura: iluminação clara, recibo plano, todos os cantos visíveis, texto legível.
+
 👉 ${REUPLOAD_URL}
 
 Equipe Panini XP`
