@@ -17,6 +17,7 @@ export type ReviewReason =
   | 'amount_too_low'
   | 'date_out_of_window'
   | 'unreadable'
+  | 'unreadable_image'
   | 'low_confidence'
   | 'incomplete_extraction'
 
@@ -24,6 +25,7 @@ export type ValidationResult =
   | { status: 'approved'; codes_to_generate: number }
   | { status: 'rejected'; reason: RejectionReason }
   | { status: 'needs_review'; review_reason: ReviewReason }
+  | { status: 'awaiting_reupload'; review_reason: 'unreadable_image' }
 
 export function normalizeCnpj(cnpj: string | null): string | null {
   if (cnpj === null) return null
@@ -40,6 +42,13 @@ export async function validateReceipt(
   receiptId: string,
   supabase: SupabaseClient
 ): Promise<ValidationResult> {
+  // Pre-check 0 — Unreadable image: request a better photo
+  const nullFieldCount = [extracted.cnpj, extracted.amount_total_brl, extracted.receipt_date]
+    .filter(v => v === null).length
+  if (extracted.is_readable === false || (extracted.confidence === 'low' && nullFieldCount >= 2)) {
+    return { status: 'awaiting_reupload', review_reason: 'unreadable_image' }
+  }
+
   // Pre-check A — low confidence: skip validation entirely, send to human review
   if (extracted.confidence === 'low') {
     return { status: 'needs_review', review_reason: 'low_confidence' }
