@@ -1,6 +1,6 @@
 # Panini XP 2026 — Living Project Handoff
 
-**Last updated:** Saturday, May 9, 2026, late evening Brazil time
+**Last updated:** Saturday, May 9, 2026, end of day Brazil time
 **Status:** Rebuilt after Claude.ai chat context limit hit. Supersedes all prior handoffs.
 
 ---
@@ -195,6 +195,7 @@ In order: schema migration → Claude extractor → 8-rule validator → atomic 
 | 26 | Email I duplicate prevention via manual_review_email_sent_at | Added receipts.manual_review_email_sent_at TIMESTAMPTZ. sendManualReviewEmailOnce() helper in process-receipt.ts checks the column before sending and writes it after. Pattern: fire-once emails use a dedicated timestamp column as an idempotency guard. | 2026-05-09 | Without the guard, every reanalysis run re-sent Email I to already-notified customers |
 | 27 | Auto-reject scope: only is_receipt=false at confidence=high | Other rejection reasons (invalid_cnpj, amount_too_low, date_out_of_window) still route to needs_review. Each requires individual safety analysis before auto-rejection can be trusted. Only is_receipt=false at high confidence is unambiguous enough to act on without human review. | 2026-05-09 | Safety-first: wrong auto-rejection hurts real customers |
 | 28 | Email B copy: single message for both auto-rejection and admin manual rejection | Rewritten with full receipt field list, QR-only warning, finality tone. Works for both contexts because it focuses on what the customer must do next, not what decision was made. Finality tone (Nao foi possivel processar) distinguishes from Email H (hopeful, same receipt). | 2026-05-09 | Audit finding: same email fired from two paths, must work for both |
+| 29 | Orchestrator hardening — error handling on all DB writes | All 10 call sites in process-receipt.ts now capture { error } from supabase update calls, logError if non-null, and return { status: 'error', message: ... } before any downstream side effects (email sends). Pattern: state-changing writes must succeed before customer communication can fire. Site 5 (AI metadata) keeps intentional log-and-continue with documented trade-off comment. Site 0 (revertToUploaded) uses best-effort logging since it's already in error recovery. | 2026-05-09 | Closes the loop on today's incident class. |
 
 ---
 
@@ -320,7 +321,6 @@ Values stored in Apple Notes "Panini XP — Project Keys".
 - Test 2 (second-strike detection) — built but never verified end-to-end
 - Dead imports in process-receipt.ts (Issue 4 from audit) — cleanup (sendReceiptRejectedNotReceipt is now wired; remaining dead imports: sendReceiptRejectedInvalidCnpj, sendReceiptRejectedAmountTooLow, sendReceiptRejectedDateOutOfWindow, sendReceiptPleaseReupload)
 - Issues 8-10 from audit — low severity, future cleanup
-- Orchestrator silent error swallowing pattern — DB write errors in non-awaiting_reupload paths are still discarded (no error check on update result). Risk: any future schema mismatch, RLS policy change, or DB anomaly would cause silent failures identical to the May 9 constraint incident. Fix: add error handling to all DB writes in process-receipt.ts.
 - 244 needs_review receipts still in queue — require manual processing or additional auto-reject rules. apply-not-a-receipt-rejection.ts dry-run found 0 matches — existing queue has no high-confidence is_receipt=false cases.
 - 63 awaiting_reupload receipts will silently transition to needs_review after 7-day timeout cron if no customer re-upload — expected and by design, but worth monitoring.
 - schema.sql sync verification — CHECK constraint fix (awaiting_reupload added) was applied directly in Supabase SQL editor; not captured in any migration file. Sync schema.sql if one is being maintained.
@@ -405,14 +405,19 @@ Created one-off script to apply the new auto-reject rule to the 192 existing nee
 
 Dry-run result: **0 matches** — no existing needs_review receipt has `is_receipt=false AND confidence=high`. The queue's not_a_receipt cases are all medium/low confidence. Script is valid for future use but the immediate backfill is a no-op.
 
+**7. Orchestrator hardening (commit 35c05ee)**
+
+Added error handling to all 10 DB write call sites in process-receipt.ts. State-changing writes now capture errors, log them via logError, and return error status before any email send. Closes the silent-failure incident class from this morning.
+
 **Commits this session:**
 - `080d23e` feat(ops): add resolve-stuck-receipts script for timeout recovery
 - `8b7c567` feat(orchestrator): guard Email I against duplicates via manual_review_email_sent_at
 - `4c1c1b3` feat(validator): auto-reject when is_receipt is false at high confidence
 - `caba829` fix(emails): update Email B body with detailed guidance and finality tone
 - `1cda2c7` feat(ops): add apply-not-a-receipt-rejection cleanup script
+- `35c05ee` fix(orchestrator): add error handling to all DB write call sites
 
-**Status at session end:** Production incident resolved. Email I deduplication live. Auto-reject for clear non-receipts live. 244 needs_review receipts remain for manual processing or future auto-reject expansion.
+**Status at session end:** Production incident resolved. Email I deduplication live. Auto-reject for clear non-receipts live. Orchestrator silent-error-swallowing fully resolved — all DB writes now fail loudly and block downstream email sends. 244 needs_review receipts remain for manual processing or future auto-reject expansion.
 
 ---
 
