@@ -294,10 +294,19 @@ export async function sendReceiptReuploadRequest(params: {
 }): Promise<void> {
   const text = `Olá, ${params.nickname}!
 
-Recebemos seu recibo, mas a imagem não está nítida o suficiente para identificarmos as informações.
+Recebemos seu recibo, mas a imagem não está nítida o suficiente para identificarmos as informações necessárias.
 
-Para que você possa receber seu(s) código(s), por favor envie uma nova foto do mesmo recibo. Para uma boa leitura:
+Para receber seu(s) código(s), precisamos que a foto mostre o recibo inteiro com:
 
+📌 CNPJ da loja
+📌 Razão social
+📌 Data da compra
+📌 Valor total
+📌 Número do cupom
+
+⚠️ Não envie apenas o QR Code — ele não é suficiente. Precisamos do recibo inteiro.
+
+Para uma boa leitura:
 📸 Iluminação clara, sem sombras
 📸 Recibo plano, sem dobras
 📸 Todos os cantos visíveis
