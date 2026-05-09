@@ -12,14 +12,16 @@ import {
   sendReceiptRejectedDateOutOfWindow,
   sendReceiptRejectedDuplicate,
   sendReceiptPleaseReupload,
+  sendReceiptReuploadRequest,
 } from './send-receipt-emails'
 
 export type ProcessResult =
-  | { status: 'approved';     codes: string[] }
-  | { status: 'rejected';     reason: RejectionReason }
-  | { status: 'needs_review' }
-  | { status: 'skipped';      previousStatus: string }
-  | { status: 'error';        message: string }
+  | { status: 'approved';          codes: string[] }
+  | { status: 'rejected';          reason: RejectionReason }
+  | { status: 'needs_review';      review_reason?: string }
+  | { status: 'awaiting_reupload' }
+  | { status: 'skipped';           previousStatus: string }
+  | { status: 'error';             message: string }
 
 function getMimeType(storagePath: string): ImageMimeType | null {
   const ext = storagePath.split('.').pop()?.toLowerCase()
@@ -284,6 +286,42 @@ export async function processReceipt(
     }
 
     return { status: 'rejected', reason: validation.reason }
+  }
+
+  if (validation.status === 'awaiting_reupload') {
+    // Check for second strike: most recent prior receipt for this participant
+    const { data: priorReceipt } = await supabase
+      .from('receipts')
+      .select('id, reupload_request_sent_at')
+      .eq('participant_id', participantId)
+      .neq('id', receiptId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    const isSecondStrike =
+      priorReceipt !== null &&
+      priorReceipt.reupload_request_sent_at !== null
+
+    if (isSecondStrike) {
+      // Case A — second unreadable upload: route to needs_review silently (Email I comes in Task 5)
+      await supabase
+        .from('receipts')
+        .update({ status: 'needs_review', rejection_reason: null })
+        .eq('id', receiptId)
+      return { status: 'needs_review', review_reason: 'second_unreadable_upload' }
+    } else {
+      // Case B — first unreadable upload: ask customer to re-upload
+      await supabase
+        .from('receipts')
+        .update({
+          status: 'awaiting_reupload',
+          reupload_request_sent_at: new Date().toISOString(),
+        })
+        .eq('id', receiptId)
+      await sendReceiptReuploadRequest({ participantId, email, nickname, uploadDate })
+      return { status: 'awaiting_reupload' }
+    }
   }
 
   // needs_review

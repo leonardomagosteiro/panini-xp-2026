@@ -18,6 +18,7 @@ export type ReviewReason =
   | 'date_out_of_window'
   | 'unreadable'
   | 'unreadable_image'
+  | 'second_unreadable_upload'
   | 'low_confidence'
   | 'incomplete_extraction'
 
