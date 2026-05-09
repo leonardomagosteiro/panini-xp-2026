@@ -1,6 +1,6 @@
 # Panini XP 2026 — Living Project Handoff
 
-**Last updated:** Friday, May 8, 2026 — end of day (~evening, Brazil time)
+**Last updated:** Saturday, May 9, 2026, 8am Brazil time
 **Status:** Rebuilt after Claude.ai chat context limit hit. Supersedes all prior handoffs.
 
 ---
@@ -368,6 +368,22 @@ Values stored in Apple Notes "Panini XP — Project Keys".
 **Outstanding at session end:**
 - Manual testing of resize (5 test cases in spec section 6) — Leonardo to run
 - OpenAI integration — decided, paused pending their service stability
+- All items in section 18 remain open
+
+---
+
+### Saturday May 9, 2026 — morning session start (Claude.ai)
+
+**Context:** Resumed work after stopping yesterday evening. OpenAI service is now stable. Picking up where May 8 third session left off.
+
+**In progress:**
+- Complete OpenAI account setup: billing limits, payment method, API key
+- Save key securely (.env.local + Vercel env vars)
+- Write OpenAI integration spec at docs/openai-integration-spec.md
+
+**Outstanding from yesterday (still open):**
+- Manual testing of resize on real iPhone hardware — NOT YET DONE
+- Manual review queue — count unknown, needs check
 - All items in section 18 remain open
 
 ---
