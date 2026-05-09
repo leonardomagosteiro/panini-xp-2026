@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { extractReceipt, type ImageMimeType } from './extract-receipt'
+import { extractReceiptOpenAI } from './extract-receipt-openai'
 import { validateReceipt, normalizeCnpj, type RejectionReason } from './validate-receipt'
 import { generateCodesForReceipt } from './generate-codes'
 import { logError } from './log-error'
@@ -144,9 +145,12 @@ export async function processReceipt(
   }
 
   // Step 5 — Extract data via AI
+  const provider = process.env.AI_EXTRACTION_PROVIDER === 'openai' ? 'openai' : 'claude'
   let extracted: Awaited<ReturnType<typeof extractReceipt>>
   try {
-    extracted = await extractReceipt(imageBase64, mimeType)
+    extracted = provider === 'openai'
+      ? await extractReceiptOpenAI(imageBase64, mimeType)
+      : await extractReceipt(imageBase64, mimeType)
   } catch (err) {
     const errMessage = err instanceof Error ? err.message : String(err)
 
@@ -181,7 +185,7 @@ export async function processReceipt(
   const { error: metaError } = await supabase
     .from('receipts')
     .update({
-      ai_raw_response: extracted,
+      ai_raw_response: { ...extracted, _provider: provider },
       ai_confidence: extracted.confidence,
       ai_processed_at: new Date().toISOString(),
       receipt_number: extracted.receipt_number,
