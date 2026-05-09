@@ -18,6 +18,7 @@ export type ReviewReason =
   | 'date_out_of_window'
   | 'unreadable'
   | 'low_confidence'
+  | 'incomplete_extraction'
 
 export type ValidationResult =
   | { status: 'approved'; codes_to_generate: number }
@@ -39,6 +40,22 @@ export async function validateReceipt(
   receiptId: string,
   supabase: SupabaseClient
 ): Promise<ValidationResult> {
+  // Pre-check A — low confidence: skip validation entirely, send to human review
+  if (extracted.confidence === 'low') {
+    return { status: 'needs_review', review_reason: 'low_confidence' }
+  }
+
+  // Pre-check B — incomplete extraction: one or more critical fields missing or not 14 digits
+  const normalizedCnpjPre = normalizeCnpj(extracted.cnpj)
+  if (
+    normalizedCnpjPre === null ||
+    normalizedCnpjPre.length !== 14 ||
+    extracted.amount_total_brl === null ||
+    extracted.receipt_date === null
+  ) {
+    return { status: 'needs_review', review_reason: 'incomplete_extraction' }
+  }
+
   // Step 1 — not a receipt
   if (!extracted.is_receipt) {
     return { status: 'needs_review', review_reason: 'not_a_receipt' }
