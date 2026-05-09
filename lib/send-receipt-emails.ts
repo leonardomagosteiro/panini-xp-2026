@@ -62,8 +62,10 @@ export async function sendReceiptRejectedNotReceipt(params: {
   email: string
   nickname: string
   uploadDate: string
+  isDelayedAnalysis?: boolean
 }): Promise<void> {
-  const text = `Olá, ${params.nickname}!
+  const prefix = params.isDelayedAnalysis ? 'Recebemos seu recibo há alguns dias e finalizamos a análise agora.\n\n' : ''
+  const text = `${prefix}Olá, ${params.nickname}!
 
 Recebemos seu envio, mas não conseguimos identificar uma nota fiscal válida na imagem.
 
@@ -96,8 +98,10 @@ export async function sendReceiptRejectedInvalidCnpj(params: {
   email: string
   nickname: string
   uploadDate: string
+  isDelayedAnalysis?: boolean
 }): Promise<void> {
-  const text = `Olá, ${params.nickname}!
+  const prefix = params.isDelayedAnalysis ? 'Recebemos seu recibo há alguns dias e finalizamos a análise agora.\n\n' : ''
+  const text = `${prefix}Olá, ${params.nickname}!
 
 Seu recibo foi recebido, mas o CNPJ da loja não está entre os participantes desta campanha.
 
@@ -133,8 +137,10 @@ export async function sendReceiptRejectedAmountTooLow(params: {
   nickname: string
   uploadDate: string
   amountBrl: number
+  isDelayedAnalysis?: boolean
 }): Promise<void> {
-  const text = `Olá, ${params.nickname}!
+  const prefix = params.isDelayedAnalysis ? 'Recebemos seu recibo há alguns dias e finalizamos a análise agora.\n\n' : ''
+  const text = `${prefix}Olá, ${params.nickname}!
 
 Seu recibo foi recebido, mas o valor total está abaixo de R$50, que é o mínimo para gerar um código.
 
@@ -169,8 +175,10 @@ export async function sendReceiptRejectedDateOutOfWindow(params: {
   email: string
   nickname: string
   uploadDate: string
+  isDelayedAnalysis?: boolean
 }): Promise<void> {
-  const text = `Olá, ${params.nickname}!
+  const prefix = params.isDelayedAnalysis ? 'Recebemos seu recibo há alguns dias e finalizamos a análise agora.\n\n' : ''
+  const text = `${prefix}Olá, ${params.nickname}!
 
 Seu recibo foi recebido, mas a data não está dentro do período válido da campanha.
 
@@ -205,8 +213,10 @@ export async function sendReceiptRejectedDuplicate(params: {
   email: string
   nickname: string
   uploadDate: string
+  isDelayedAnalysis?: boolean
 }): Promise<void> {
-  const text = `Olá, ${params.nickname}!
+  const prefix = params.isDelayedAnalysis ? 'Recebemos seu recibo há alguns dias e finalizamos a análise agora.\n\n' : ''
+  const text = `${prefix}Olá, ${params.nickname}!
 
 Recebemos seu envio, mas este recibo já foi registrado anteriormente em nossa campanha. Cada recibo só pode ser usado uma única vez.
 
@@ -239,8 +249,10 @@ export async function sendReceiptPleaseReupload(params: {
   email: string
   nickname: string
   uploadDate: string
+  isDelayedAnalysis?: boolean
 }): Promise<void> {
-  const text = `Olá, ${params.nickname}!
+  const prefix = params.isDelayedAnalysis ? 'Recebemos seu recibo há alguns dias e finalizamos a análise agora.\n\n' : ''
+  const text = `${prefix}Olá, ${params.nickname}!
 
 Recebemos seu recibo, mas a imagem não está clara o suficiente para identificarmos as informações.
 
