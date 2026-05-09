@@ -4,7 +4,6 @@ import { createAdminClient } from '@/lib/supabase-admin'
 import { processReceipt } from '@/lib/process-receipt'
 import { logError } from '@/lib/log-error'
 import { randomUUID } from 'crypto'
-import { Resend } from 'resend'
 
 const MAX_SIZE = 4.5 * 1024 * 1024
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']
@@ -96,26 +95,6 @@ export async function POST(req: NextRequest) {
         { error: 'Erro ao registrar recibo. Tente novamente.' },
         { status: 500 }
       )
-    }
-
-    if (participant.email) {
-      try {
-        const resend = new Resend(process.env.RESEND_API_KEY)
-        const greeting = participant.nickname ? `Olá, ${participant.nickname}!` : 'Olá!'
-        await resend.emails.send({
-          from: 'Panini XP <copa2026@paninixp.com.br>',
-          replyTo: 'campinas@paninixp.com.br',
-          to: participant.email,
-          subject: 'Recibo recebido — Panini XP',
-          text: `${greeting}\n\nRecebemos seu recibo da Panini Point Experience. Nosso sistema está analisando agora.\n\nEm breve você receberá um email com o resultado:\n✅ Se aprovado, vamos enviar seu(s) código(s)\n📸 Se a imagem precisar de uma nova foto, vamos te avisar\n🔍 Em alguns casos, nosso time pode revisar manualmente\n\nObrigado por participar!\n\nEquipe Panini XP`,
-        })
-      } catch (emailErr) {
-        await logError('upload-recibo-email', 'Failed to send confirmation email', {
-          participant_id: participant.id,
-          cpf,
-          error: String(emailErr),
-        })
-      }
     }
 
     waitUntil(processReceipt(insertData.id, supabase))
