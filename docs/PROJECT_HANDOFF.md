@@ -1,6 +1,6 @@
 # Panini XP 2026 — Living Project Handoff
 
-**Last updated:** Saturday, May 9, 2026, 8am Brazil time
+**Last updated:** Saturday, May 9, 2026, 9:54am Brazil time
 **Status:** Rebuilt after Claude.ai chat context limit hit. Supersedes all prior handoffs.
 
 ---
@@ -184,6 +184,7 @@ In order: schema migration → Claude extractor → 8-rule validator → atomic 
 | 15 | OpenAI integration timing | Paused | 2026-05-08 | OpenAI service issues today |
 | 16 | Image size handling | Build client-side resize before upload | 2026-05-08 | Active session work |
 | 17 | Living handoff document | Update PROJECT_HANDOFF.md every session | 2026-05-08 | Prevent context-loss recovery problems |
+| 18 | OpenAI integration shipped to production | Live with gpt-4o + Structured Outputs, kill-switch via env var | 2026-05-09 | Verified end-to-end with real receipt before launch |
 
 ---
 
@@ -369,6 +370,50 @@ Values stored in Apple Notes "Panini XP — Project Keys".
 - Manual testing of resize (5 test cases in spec section 6) — Leonardo to run
 - OpenAI integration — decided, paused pending their service stability
 - All items in section 18 remain open
+
+---
+
+### Saturday May 9, 2026 — OpenAI integration shipped (Claude.ai + Claude Code)
+
+**Context:** Followed yesterday's plan — wrote OpenAI integration spec, implemented, tested locally, shipped to production, all before 10am launch.
+
+**Accomplished:**
+- Created OpenAI account and project (panini-xp-2026), set $50 monthly budget with 50% / 96% / 100% alerts, added payment method, generated API key
+- Loaded $50 prepaid credit balance with auto-recharge enabled
+- Added OPENAI_API_KEY to .env.local and Vercel (sensitive, all environments)
+- Wrote spec at docs/openai-integration-spec.md
+- Implemented lib/extract-receipt-openai.ts with OpenAI Structured Outputs (gpt-4o, temperature 0, json_schema strict mode)
+- Added AI_EXTRACTION_PROVIDER env var toggle in lib/process-receipt.ts (default: claude)
+- Added test script scripts/test-openai-extractor.ts for local testing without waitUntil
+- Hardened OpenAI prompt to require exactly 14-digit CNPJ, return null if uncertain (commit 65c890e)
+- Tightened validator with pre-check for incomplete/low-confidence extraction — routes to needs_review (commit a5aaa8b)
+- Fixed unreachable code error caught by TypeScript (commit 53e2928)
+- Flipped Vercel env var AI_EXTRACTION_PROVIDER from claude to openai
+- Verified end-to-end in production: real receipt uploaded — OpenAI extracted CNPJ correctly — validator approved — code PXP-2026-SN98R generated — email "Seus codigos chegaram" delivered
+
+**Decisions made this session:**
+- AI provider in production: OpenAI (gpt-4o)
+- Toggle architecture preserved: claude path still in code as kill-switch
+- No silent fallback: if OpenAI fails, receipt routes to needs_review, never falls back to Claude
+
+**Commits today:**
+- 0888ac5 feat(ai): add openai sdk dependency
+- 19333a5 feat(ai): add OpenAI-based receipt extractor with structured outputs
+- d4eb9ad feat(ai): add provider toggle to process-receipt orchestrator
+- aae54f1 test(ai): add one-off OpenAI extractor test script
+- 65c890e feat(ai): harden OpenAI extraction prompt
+- a5aaa8b feat(validator): route incomplete or low-confidence extractions to needs_review
+- 53e2928 fix(validator): remove unreachable low-confidence check
+
+**Outstanding (post-launch cleanup):**
+- Test participant LeoQATester with code PXP-2026-SN98R is in production database — clean up or keep as real entry
+- 4 API keys leaked into Claude.ai chat earlier this morning need rotation: SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY, RESEND_API_KEY, NEXT_PUBLIC_SUPABASE_ANON_KEY (deferred for post-launch per Leonardo's call)
+- Manual review queue from yesterday — count unknown
+- Reprocess 198 historical false-rejected receipts now that OpenAI is live
+- 166 customers from May 7 recovery emails still need re-processing
+- All items in section 18 remain open
+
+**Status at session end:** Production live on OpenAI. Launch in 6 minutes. Monitoring planned.
 
 ---
 
