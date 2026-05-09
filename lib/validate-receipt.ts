@@ -61,12 +61,9 @@ export async function validateReceipt(
     return { status: 'needs_review', review_reason: 'not_a_receipt' }
   }
 
-  // Step 2 — unreadable or low confidence (split: different semantics)
+  // Step 2 — unreadable
   if (!extracted.is_readable) {
     return { status: 'needs_review', review_reason: 'unreadable' }
-  }
-  if (extracted.confidence === 'low') {
-    return { status: 'needs_review', review_reason: 'low_confidence' }
   }
 
   // Step 3 — CNPJ must match a valid issuer
