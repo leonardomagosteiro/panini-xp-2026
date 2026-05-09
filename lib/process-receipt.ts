@@ -37,10 +37,16 @@ function getMimeType(storagePath: string): ImageMimeType | null {
 }
 
 async function revertToUploaded(receiptId: string, supabase: SupabaseClient): Promise<void> {
-  await supabase
+  const { error } = await supabase
     .from('receipts')
     .update({ status: 'uploaded' })
     .eq('id', receiptId)
+  if (error) {
+    await logError('process-receipt', 'Failed to revert receipt to uploaded (best-effort)', {
+      receiptId,
+      error: error.message,
+    })
+  }
 }
 
 // Sends Email I at most once per receipt. Checks manual_review_email_sent_at before sending
@@ -120,13 +126,21 @@ export async function processReceipt(
     // Condition 1 — No email on file: route to needs_review for admin follow-up.
     // Not an error — this is expected for participants who registered without email.
     // Admin UI (Component 8) will show the _system_note to explain why it's here.
-    await supabase
+    const { error: noEmailUpdateErr } = await supabase
       .from('receipts')
       .update({
         status: 'needs_review',
         ai_raw_response: { _system_note: 'no_email_on_file', skipped_at: new Date().toISOString() },
       })
       .eq('id', receiptId)
+    if (noEmailUpdateErr) {
+      await logError('process-receipt', 'Failed to update receipt status to needs_review (no_email_on_file)', {
+        receiptId,
+        attempted_status: 'needs_review',
+        error: noEmailUpdateErr.message,
+      })
+      return { status: 'error', message: `DB update failed: ${noEmailUpdateErr.message}` }
+    }
     return { status: 'needs_review' }
   }
 
@@ -164,7 +178,7 @@ export async function processReceipt(
   // Check before calling extractReceipt to avoid a guaranteed API error and save cost.
   const BASE64_SIZE_LIMIT = 5 * 1024 * 1024
   if (imageBase64.length > BASE64_SIZE_LIMIT) {
-    await supabase
+    const { error: tooLargeUpdateErr } = await supabase
       .from('receipts')
       .update({
         status: 'needs_review',
@@ -175,6 +189,14 @@ export async function processReceipt(
         },
       })
       .eq('id', receiptId)
+    if (tooLargeUpdateErr) {
+      await logError('process-receipt', 'Failed to update receipt status to needs_review (image_too_large)', {
+        receiptId,
+        attempted_status: 'needs_review',
+        error: tooLargeUpdateErr.message,
+      })
+      return { status: 'error', message: `DB update failed: ${tooLargeUpdateErr.message}` }
+    }
     await sendManualReviewEmailOnce(receiptId, supabase, { participantId, email, nickname, uploadDate })
     return { status: 'needs_review' }
   }
@@ -194,7 +216,7 @@ export async function processReceipt(
     // so admin can inspect the image manually. Other errors (network, timeout)
     // keep the existing behavior: revert to uploaded so the receipt can be retried.
     if (/could not process image|invalid image|unsupported image format|exceeds.*maximum|image too large/i.test(errMessage)) {
-      await supabase
+      const { error: unprocessableUpdateErr } = await supabase
         .from('receipts')
         .update({
           status: 'needs_review',
@@ -205,6 +227,14 @@ export async function processReceipt(
           },
         })
         .eq('id', receiptId)
+      if (unprocessableUpdateErr) {
+        await logError('process-receipt', 'Failed to update receipt status to needs_review (image_unprocessable)', {
+          receiptId,
+          attempted_status: 'needs_review',
+          error: unprocessableUpdateErr.message,
+        })
+        return { status: 'error', message: `DB update failed: ${unprocessableUpdateErr.message}` }
+      }
       await sendManualReviewEmailOnce(receiptId, supabase, { participantId, email, nickname, uploadDate })
       return { status: 'needs_review' }
     }
@@ -231,6 +261,9 @@ export async function processReceipt(
     .eq('id', receiptId)
 
   if (metaError) {
+    // Non-fatal: if this write fails, ai_processed_at is not set, which means
+    // resolve-stuck-receipts.ts won't pick this receipt up later (it queries
+    // ai_processed_at IS NOT NULL). Resolve scripts may need a fallback path.
     await logError('process-receipt', 'Failed to save AI metadata (continuing)', {
       receiptId,
       error: metaError.message,
@@ -287,10 +320,20 @@ export async function processReceipt(
       }
     }
 
-    await supabase
+    const { error: approvedUpdateErr } = await supabase
       .from('receipts')
       .update({ status: 'approved', codes_generated: codes.length })
       .eq('id', receiptId)
+
+    if (approvedUpdateErr) {
+      await logError('process-receipt', 'Failed to update receipt status to approved', {
+        receiptId,
+        attempted_status: 'approved',
+        codes_generated: codes.length,
+        error: approvedUpdateErr.message,
+      })
+      return { status: 'error', message: `DB update failed: ${approvedUpdateErr.message}` }
+    }
 
     await sendReceiptApproved({
       participantId,
@@ -305,10 +348,20 @@ export async function processReceipt(
   }
 
   if (validation.status === 'rejected') {
-    await supabase
+    const { error: rejectedUpdateErr } = await supabase
       .from('receipts')
       .update({ status: 'rejected', rejection_reason: validation.reason })
       .eq('id', receiptId)
+
+    if (rejectedUpdateErr) {
+      await logError('process-receipt', 'Failed to update receipt status to rejected', {
+        receiptId,
+        attempted_status: 'rejected',
+        rejection_reason: validation.reason,
+        error: rejectedUpdateErr.message,
+      })
+      return { status: 'error', message: `DB update failed: ${rejectedUpdateErr.message}` }
+    }
 
     const baseParams = { participantId, email, nickname, uploadDate, isDelayedAnalysis: options?.isDelayedAnalysis ?? false }
 
@@ -341,28 +394,44 @@ export async function processReceipt(
 
     if (isSecondStrike) {
       // Case A — second unreadable upload: route to needs_review, notify customer
-      await supabase
+      const { error: caseAUpdateErr } = await supabase
         .from('receipts')
         .update({ status: 'needs_review', rejection_reason: null })
         .eq('id', receiptId)
+      if (caseAUpdateErr) {
+        await logError('process-receipt', 'Failed to update receipt status to needs_review (second_unreadable_upload)', {
+          receiptId,
+          attempted_status: 'needs_review',
+          error: caseAUpdateErr.message,
+        })
+        return { status: 'error', message: `DB update failed: ${caseAUpdateErr.message}` }
+      }
       await sendManualReviewEmailOnce(receiptId, supabase, { participantId, email, nickname, uploadDate })
       return { status: 'needs_review', review_reason: 'second_unreadable_upload' }
     } else {
       // Case B — first unreadable upload: ask customer to re-upload
-      await supabase
+      const { error: caseBUpdateErr } = await supabase
         .from('receipts')
         .update({
           status: 'awaiting_reupload',
           reupload_request_sent_at: new Date().toISOString(),
         })
         .eq('id', receiptId)
+      if (caseBUpdateErr) {
+        await logError('process-receipt', 'Failed to update receipt status to awaiting_reupload', {
+          receiptId,
+          attempted_status: 'awaiting_reupload',
+          error: caseBUpdateErr.message,
+        })
+        return { status: 'error', message: `DB update failed: ${caseBUpdateErr.message}` }
+      }
       await sendReceiptReuploadRequest({ participantId, email, nickname, uploadDate })
       return { status: 'awaiting_reupload' }
     }
   }
 
   // needs_review
-  await supabase
+  const { error: needsReviewUpdateErr } = await supabase
     .from('receipts')
     .update({
       status: 'needs_review',
@@ -373,6 +442,16 @@ export async function processReceipt(
       },
     })
     .eq('id', receiptId)
+
+  if (needsReviewUpdateErr) {
+    await logError('process-receipt', 'Failed to update receipt status to needs_review', {
+      receiptId,
+      attempted_status: 'needs_review',
+      review_reason: validation.review_reason,
+      error: needsReviewUpdateErr.message,
+    })
+    return { status: 'error', message: `DB update failed: ${needsReviewUpdateErr.message}` }
+  }
 
   await sendManualReviewEmailOnce(receiptId, supabase, { participantId, email, nickname, uploadDate })
   return { status: 'needs_review' }
