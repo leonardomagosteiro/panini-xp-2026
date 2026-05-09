@@ -43,6 +43,36 @@ async function revertToUploaded(receiptId: string, supabase: SupabaseClient): Pr
     .eq('id', receiptId)
 }
 
+// Sends Email I at most once per receipt. Checks manual_review_email_sent_at before sending
+// and writes the timestamp after. Guards against duplicate emails on reanalysis runs.
+async function sendManualReviewEmailOnce(
+  receiptId: string,
+  supabase: SupabaseClient,
+  params: { participantId: string; email: string; nickname: string; uploadDate: string }
+): Promise<void> {
+  const { data: check } = await supabase
+    .from('receipts')
+    .select('manual_review_email_sent_at')
+    .eq('id', receiptId)
+    .maybeSingle()
+
+  if (check?.manual_review_email_sent_at) return
+
+  await sendReceiptManualReviewNotification(params)
+
+  const { error: updateErr } = await supabase
+    .from('receipts')
+    .update({ manual_review_email_sent_at: new Date().toISOString() })
+    .eq('id', receiptId)
+
+  if (updateErr) {
+    await logError('process-receipt', 'Failed to set manual_review_email_sent_at (email was sent)', {
+      receiptId,
+      error: updateErr.message,
+    })
+  }
+}
+
 export async function processReceipt(
   receiptId: string,
   supabase: SupabaseClient,
@@ -145,7 +175,7 @@ export async function processReceipt(
         },
       })
       .eq('id', receiptId)
-    await sendReceiptManualReviewNotification({ participantId, email, nickname, uploadDate })
+    await sendManualReviewEmailOnce(receiptId, supabase, { participantId, email, nickname, uploadDate })
     return { status: 'needs_review' }
   }
 
@@ -175,7 +205,7 @@ export async function processReceipt(
           },
         })
         .eq('id', receiptId)
-      await sendReceiptManualReviewNotification({ participantId, email, nickname, uploadDate })
+      await sendManualReviewEmailOnce(receiptId, supabase, { participantId, email, nickname, uploadDate })
       return { status: 'needs_review' }
     }
 
@@ -312,7 +342,7 @@ export async function processReceipt(
         .from('receipts')
         .update({ status: 'needs_review', rejection_reason: null })
         .eq('id', receiptId)
-      await sendReceiptManualReviewNotification({ participantId, email, nickname, uploadDate })
+      await sendManualReviewEmailOnce(receiptId, supabase, { participantId, email, nickname, uploadDate })
       return { status: 'needs_review', review_reason: 'second_unreadable_upload' }
     } else {
       // Case B — first unreadable upload: ask customer to re-upload
@@ -341,6 +371,6 @@ export async function processReceipt(
     })
     .eq('id', receiptId)
 
-  await sendReceiptManualReviewNotification({ participantId, email, nickname, uploadDate })
+  await sendManualReviewEmailOnce(receiptId, supabase, { participantId, email, nickname, uploadDate })
   return { status: 'needs_review' }
 }
