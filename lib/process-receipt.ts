@@ -42,7 +42,8 @@ async function revertToUploaded(receiptId: string, supabase: SupabaseClient): Pr
 
 export async function processReceipt(
   receiptId: string,
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  options?: { isDelayedAnalysis?: boolean }
 ): Promise<ProcessResult> {
   // Step 1 — Read receipt row
   const { data: receipt, error: receiptError } = await supabase
@@ -274,7 +275,7 @@ export async function processReceipt(
       .update({ status: 'rejected', rejection_reason: validation.reason })
       .eq('id', receiptId)
 
-    const baseParams = { participantId, email, nickname, uploadDate }
+    const baseParams = { participantId, email, nickname, uploadDate, isDelayedAnalysis: options?.isDelayedAnalysis ?? false }
 
     switch (validation.reason) {
       case 'duplicate':
