@@ -43,10 +43,17 @@ export async function validateReceipt(
   receiptId: string,
   supabase: SupabaseClient
 ): Promise<ValidationResult> {
-  // Pre-check 0 — Unreadable image: request a better photo
+  // Pre-check 0 — Unreadable image: ask customer to re-upload
+  // TODO(razao-social): when razão social cross-validation ships, the cnpj === null
+  // branch should change to: cnpj === null AND razão social doesn't match a known store.
+  // Currently fires unconditionally on null cnpj since we have no backup signal.
   const nullFieldCount = [extracted.cnpj, extracted.amount_total_brl, extracted.receipt_date]
     .filter(v => v === null).length
-  if (extracted.is_readable === false || (extracted.confidence === 'low' && nullFieldCount >= 2)) {
+  if (
+    extracted.is_readable === false ||
+    (extracted.confidence === 'low' && nullFieldCount >= 2) ||
+    extracted.cnpj === null
+  ) {
     return { status: 'awaiting_reupload', review_reason: 'unreadable_image' }
   }
 
