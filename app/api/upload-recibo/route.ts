@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
           replyTo: 'campinas@paninixp.com.br',
           to: participant.email,
           subject: 'Recibo recebido — Panini XP',
-          text: `${greeting}\n\nRecebemos seu recibo da Panini Point Experience. Em breve você receberá seus códigos para concorrer aos prêmios da Copa do Mundo 2026.\n\nOs códigos serão enviados antes de qualquer sorteio, então fique tranquilo.\n\nObrigado por participar!\n\nEquipe Panini XP`,
+          text: `${greeting}\n\nRecebemos seu recibo da Panini Point Experience. Nosso sistema está analisando agora.\n\nEm breve você receberá um email com o resultado:\n✅ Se aprovado, vamos enviar seu(s) código(s)\n📸 Se a imagem precisar de uma nova foto, vamos te avisar\n🔍 Em alguns casos, nosso time pode revisar manualmente\n\nObrigado por participar!\n\nEquipe Panini XP`,
         })
       } catch (emailErr) {
         await logError('upload-recibo-email', 'Failed to send confirmation email', {
