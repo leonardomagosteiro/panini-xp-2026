@@ -4,7 +4,7 @@ import { logError } from './log-error'
 const FROM = 'Panini XP <copa2026@paninixp.com.br>'
 const REPLY_TO = 'campinas@paninixp.com.br'
 const REUPLOAD_URL = 'https://app.paninixp.com.br/enviar-recibo'
-const LOGO_URL = 'https://app.paninixp.com.br/Logo%20Panini%20XP.png'
+const LOGO_URL = 'https://app.paninixp.com.br/logo-panini-xp.png'
 
 function formatBrDate(isoOrTimestamp: string): string {
   return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(
