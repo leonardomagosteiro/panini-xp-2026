@@ -1,6 +1,6 @@
 # Panini XP 2026 — Living Project Handoff
 
-**Last updated:** Saturday, May 9, 2026, end of day Brazil time
+**Last updated:** Saturday, May 9, 2026, end of day Brazil time (final)
 **Status:** Rebuilt after Claude.ai chat context limit hit. Supersedes all prior handoffs.
 
 ---
@@ -196,6 +196,8 @@ In order: schema migration → Claude extractor → 8-rule validator → atomic 
 | 27 | Auto-reject scope: only is_receipt=false at confidence=high | Other rejection reasons (invalid_cnpj, amount_too_low, date_out_of_window) still route to needs_review. Each requires individual safety analysis before auto-rejection can be trusted. Only is_receipt=false at high confidence is unambiguous enough to act on without human review. | 2026-05-09 | Safety-first: wrong auto-rejection hurts real customers |
 | 28 | Email B copy: single message for both auto-rejection and admin manual rejection | Rewritten with full receipt field list, QR-only warning, finality tone. Works for both contexts because it focuses on what the customer must do next, not what decision was made. Finality tone (Nao foi possivel processar) distinguishes from Email H (hopeful, same receipt). | 2026-05-09 | Audit finding: same email fired from two paths, must work for both |
 | 29 | Orchestrator hardening — error handling on all DB writes | All 10 call sites in process-receipt.ts now capture { error } from supabase update calls, logError if non-null, and return { status: 'error', message: ... } before any downstream side effects (email sends). Pattern: state-changing writes must succeed before customer communication can fire. Site 5 (AI metadata) keeps intentional log-and-continue with documented trade-off comment. Site 0 (revertToUploaded) uses best-effort logging since it's already in error recovery. | 2026-05-09 | Closes the loop on today's incident class. |
+| 30 | All customer emails now ship branded HTML versions with Panini XP logo | Added buildEmailHtml() wrapper and ctaButton() helpers to lib/send-receipt-emails.ts. Every email function now sends both plain text (preserved exactly) AND HTML with logo header, table-based layout, inline styles for email client compatibility. Logo file lives in public/logo-panini-xp.png and is referenced via https://app.paninixp.com.br/logo-panini-xp.png. | 2026-05-09 | Plain-text emails felt unprofessional; brand consistency across customer touchpoints. |
+| 31 | Files in public/ must be both renamed AND git-add'ed before referencing in deployed code | Two-part lesson from tonight: (1) renaming a file in Finder doesn't update git's tracking, (2) untracked files don't deploy to Vercel. Always run git status after public/ changes to confirm files are committed. | 2026-05-09 | Production briefly had broken logo references when the rename and code update shipped without the file itself. |
 
 ---
 
@@ -325,6 +327,7 @@ Values stored in Apple Notes "Panini XP — Project Keys".
 - 63 awaiting_reupload receipts will silently transition to needs_review after 7-day timeout cron if no customer re-upload — expected and by design, but worth monitoring.
 - schema.sql sync verification — CHECK constraint fix (awaiting_reupload added) was applied directly in Supabase SQL editor; not captured in any migration file. Sync schema.sql if one is being maintained.
 - CLAUDE.md still describes pre-Phase 2 scope — does not reflect awaiting_reupload, Email H/I, manual_review_email_sent_at, or auto-reject logic
+- BIMI configuration for inbox sender logo (Brand Indicators for Message Identification) — separate from email body logo, requires DMARC enforcement, SVG variant of logo, DNS TXT record, and optionally a Verified Mark Certificate (~$1,500/year for Gmail to display the logo). Estimated 2-3 hours work + DNS access. Tomorrow's decision.
 
 ---
 
@@ -409,6 +412,12 @@ Dry-run result: **0 matches** — no existing needs_review receipt has `is_recei
 
 Added error handling to all 10 DB write call sites in process-receipt.ts. State-changing writes now capture errors, log them via logError, and return error status before any email send. Closes the silent-failure incident class from this morning.
 
+**8. Email branding (commits 16bad8a, 071b017, 96aff0c, c860e43)**
+
+Added HTML versions to all 9 email templates with Panini XP logo branding. Initial deploy missed two prerequisites: file was named with spaces (URL-encoding fragility) and was never git-added (Vercel returned 404). Resolved by: (a) renaming public/Logo Panini XP.png → public/logo-panini-xp.png, (b) updating LOGO_URL constant, (c) adding the file to git. Final email layout verified end-to-end with test upload as LeoQATester — Email I rendered with logo, callout box, bullets, and CTA button correctly. As side effect, second-strike detection was observed working naturally in the test (previous test receipt + new one → Email I as expected).
+
+Also committed: docs/email-communication-audit.md (230 lines, was created this afternoon but never staged) and removed orphan public/Logo Panini XP.png. Stray .env.localC file (CRON_SECRET duplicate from accidental save) deleted from disk.
+
 **Commits this session:**
 - `080d23e` feat(ops): add resolve-stuck-receipts script for timeout recovery
 - `8b7c567` feat(orchestrator): guard Email I against duplicates via manual_review_email_sent_at
@@ -416,8 +425,12 @@ Added error handling to all 10 DB write call sites in process-receipt.ts. State-
 - `caba829` fix(emails): update Email B body with detailed guidance and finality tone
 - `1cda2c7` feat(ops): add apply-not-a-receipt-rejection cleanup script
 - `35c05ee` fix(orchestrator): add error handling to all DB write call sites
+- `16bad8a` feat(emails): add HTML versions with Panini XP logo branding
+- `071b017` fix(emails): update LOGO_URL to renamed logo-panini-xp.png
+- `96aff0c` feat(public): add Panini XP logo for email branding
+- `c860e43` chore: cleanup — remove old logo with spaces, commit email audit doc
 
-**Status at session end:** Production incident resolved. Email I deduplication live. Auto-reject for clear non-receipts live. Orchestrator silent-error-swallowing fully resolved — all DB writes now fail loudly and block downstream email sends. 244 needs_review receipts remain for manual processing or future auto-reject expansion.
+**Status at session end:** Production stable. Phase 2 verified end-to-end. Email I deduplication live. Auto-reject for clear non-receipts live. Orchestrator hardening complete — all DB writes now fail loudly and block downstream email sends. All 9 customer emails now branded with Panini XP logo (HTML + plain text). 244 needs_review receipts remain for manual processing or future auto-reject expansion.
 
 ---
 
