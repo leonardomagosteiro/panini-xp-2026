@@ -1,13 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ExtractedData } from './extract-receipt'
+import { isLikelyValidCnpj } from './cnpj-match'
 
 const CAMPAIGN_START = '2026-04-30'
-
-const VALID_CNPJS = new Set([
-  '54511074000111',
-  '54511074000200',
-  '07348198000148',
-])
 
 export type RejectionReason = 'duplicate' | 'not_a_receipt'
 
@@ -86,9 +81,9 @@ export async function validateReceipt(
     return { status: 'needs_review', review_reason: 'unreadable' }
   }
 
-  // Step 3 — CNPJ must match a valid issuer
+  // Step 3 — CNPJ must fuzzy-match a valid issuer (distance ≤ 2)
   const normalizedCnpj = normalizeCnpj(extracted.cnpj)
-  if (normalizedCnpj === null || !VALID_CNPJS.has(normalizedCnpj)) {
+  if (!isLikelyValidCnpj(normalizedCnpj)) {
     return { status: 'needs_review', review_reason: 'invalid_cnpj' }
   }
 
