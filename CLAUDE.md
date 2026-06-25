@@ -41,6 +41,18 @@ Phase 2 in progress — receipt upload built, code generation pending.
 - Unicorn Platform for the landing page (external, not part of this Next.js app)
 - A standalone JavaScript snippet embeds the live participant counter in Unicorn Platform via Supabase
 
+## Scripts in `scripts/`
+
+Run every script in `scripts/` from Plain Terminal with:
+
+````bash
+npx tsx scripts/<name>.ts
+```
+
+Do not use `ts-node`. Do not reference a `tsconfig.scripts.json` file — it does not exist. The `tsx` runner handles modern Node + TypeScript without ESM extension friction.
+
+Any query that might return more than 1000 rows MUST paginate using `fetchAllRows` from `lib/paginate-query.ts`. The PostgREST default max-rows cap is 1000 — a query returning exactly 1000 rows is a strong smell that the result was truncated. Never trust raw `.range(0, N)` for N > 999 without confirming the response wasn't capped.
+
 ## Pages (Next.js scope — landing page is NOT here)
 - /cadastro → Registration form (for in-store QR code traffic)
 - /confirmacao → Shows generated codes after registration
