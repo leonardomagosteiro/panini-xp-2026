@@ -432,8 +432,8 @@ export default function AdminRevisaoPage() {
                       src={receipt.signed_image_url}
                       alt="Recibo"
                       style={{
-                        maxWidth: '100%',
-                        maxHeight: 180,
+                        width: '100%',
+                        maxHeight: 800,
                         objectFit: 'contain',
                         borderRadius: 6,
                         border: '1px solid #333',

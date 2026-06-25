@@ -55,12 +55,12 @@ export async function GET(req: NextRequest) {
 
   const rows = data as unknown as ReceiptRow[]
 
-  // Generate signed URLs (1 hour)
+  // Generate signed URLs (8 hours — long enough for a manual review session)
   const withUrls = await Promise.all(
     rows.map(async (row) => {
       const { data: urlData } = await supabase.storage
         .from('receipts')
-        .createSignedUrl(row.storage_path, 3600)
+        .createSignedUrl(row.storage_path, 28800)
 
       return {
         ...row,
