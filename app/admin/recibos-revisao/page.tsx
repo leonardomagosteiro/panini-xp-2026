@@ -180,7 +180,12 @@ export default function AdminRevisaoPage() {
 
   function openAction(receiptId: string, type: ActiveAction['type']) {
     setActionError('')
-    setApproveCount('1')
+    const receipt = receipts.find(r => r.id === receiptId)
+    const amount = receipt?.amount_on_receipt
+    const suggestedCount = (type === 'approve' && typeof amount === 'number' && amount >= 50)
+      ? String(Math.floor(amount / 50))
+      : '1'
+    setApproveCount(suggestedCount)
     setRejectReason('')
     setReprocessEmail('')
     setActiveAction({ receiptId, type } as ActiveAction)
@@ -454,6 +459,25 @@ export default function AdminRevisaoPage() {
                   <span style={{ color: '#555', fontSize: 12 }}>Sem dados de IA</span>
                 )}
               </div>
+
+              {/* ── Textract extraction summary ── */}
+              {(receipt.amount_on_receipt !== null || receipt.cnpj_on_receipt !== null || receipt.receipt_date !== null) && (
+                <div style={{
+                  background: '#1a1a1a',
+                  border: '1px solid #333',
+                  borderRadius: 6,
+                  padding: '8px 12px',
+                  margin: '0 0 12px',
+                  fontSize: 12,
+                  color: '#ccc',
+                  lineHeight: 1.6,
+                }}>
+                  <div><span style={{ color: '#777' }}>Valor:</span> {receipt.amount_on_receipt !== null ? `R$ ${receipt.amount_on_receipt.toFixed(2).replace('.', ',')}` : '—'}{receipt.amount_on_receipt !== null && receipt.amount_on_receipt >= 50 ? ` (${Math.floor(receipt.amount_on_receipt / 50)} codigos)` : ''}</div>
+                  <div><span style={{ color: '#777' }}>CNPJ:</span> {receipt.cnpj_on_receipt ?? '—'}</div>
+                  <div><span style={{ color: '#777' }}>Data:</span> {receipt.receipt_date ?? '—'}</div>
+                  {receipt.ai_confidence && <div><span style={{ color: '#777' }}>Confianca:</span> {receipt.ai_confidence}</div>}
+                </div>
+              )}
 
               {/* ── Timestamp ── */}
               <p style={{ color: '#555', fontSize: 11, margin: '0 0 16px' }}>

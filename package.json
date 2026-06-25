@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.1",
+    "@aws-sdk/client-textract": "^3.1075.0",
     "@supabase/supabase-js": "^2.98.0",
     "@vercel/functions": "^3.5.0",
     "browser-image-compression": "^2.0.2",

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { extractReceipt, type ImageMimeType } from './extract-receipt'
 import { extractReceiptOpenAI } from './extract-receipt-openai'
+import { extractReceiptTextract } from './extract-receipt-textract'
 import { validateReceipt, normalizeCnpj, type RejectionReason } from './validate-receipt'
 import { generateCodesForReceipt } from './generate-codes'
 import { logError } from './log-error'
@@ -56,6 +57,15 @@ async function sendManualReviewEmailOnce(
   supabase: SupabaseClient,
   params: { participantId: string; email: string; nickname: string; uploadDate: string }
 ): Promise<void> {
+  // SUPPRESS_MANUAL_REVIEW_EMAIL: set to "1" or "true" to skip sending this email entirely.
+  // Used during batch reprocessing where the manual-review notification would fire shortly
+  // before the actual approval/rejection email, making the in-review notification feel hollow.
+  // Does NOT update manual_review_email_sent_at — future organic events still get the email.
+  const suppress = process.env.SUPPRESS_MANUAL_REVIEW_EMAIL
+  if (suppress === '1' || suppress === 'true') {
+    return
+  }
+
   const { data: check } = await supabase
     .from('receipts')
     .select('manual_review_email_sent_at')
@@ -202,12 +212,17 @@ export async function processReceipt(
   }
 
   // Step 5 — Extract data via AI
-  const provider = process.env.AI_EXTRACTION_PROVIDER === 'openai' ? 'openai' : 'claude'
+  const providerEnv = process.env.AI_EXTRACTION_PROVIDER
+  const provider: 'openai' | 'claude' | 'textract' =
+    providerEnv === 'openai' ? 'openai' :
+    providerEnv === 'textract' ? 'textract' :
+    'claude'
   let extracted: Awaited<ReturnType<typeof extractReceipt>>
   try {
-    extracted = provider === 'openai'
-      ? await extractReceiptOpenAI(imageBase64, mimeType)
-      : await extractReceipt(imageBase64, mimeType)
+    extracted =
+      provider === 'openai'  ? await extractReceiptOpenAI(imageBase64, mimeType) :
+      provider === 'textract' ? await extractReceiptTextract(imageBase64, mimeType) :
+      await extractReceipt(imageBase64, mimeType)
   } catch (err) {
     const errMessage = err instanceof Error ? err.message : String(err)
 

@@ -38,16 +38,16 @@ export async function validateReceipt(
   receiptId: string,
   supabase: SupabaseClient
 ): Promise<ValidationResult> {
-  // Pre-check 0 — Unreadable image: ask customer to re-upload
-  // TODO(razao-social): when razão social cross-validation ships, the cnpj === null
-  // branch should change to: cnpj === null AND razão social doesn't match a known store.
-  // Currently fires unconditionally on null cnpj since we have no backup signal.
+  // Pre-check 0 — Unreadable image: ask customer to re-upload.
+  // We route to awaiting_reupload only when the receipt has no usable signal at all
+  // (all three core fields null). A null CNPJ alone is not enough — Textract's strict
+  // CNPJ-format regex can fail to match a receipt where the amount and date are
+  // perfectly extracted, and those receipts should go to needs_review, not reupload.
   const nullFieldCount = [extracted.cnpj, extracted.amount_total_brl, extracted.receipt_date]
     .filter(v => v === null).length
   if (
     extracted.is_readable === false ||
-    (extracted.confidence === 'low' && nullFieldCount >= 2) ||
-    extracted.cnpj === null
+    nullFieldCount === 3
   ) {
     return { status: 'awaiting_reupload', review_reason: 'unreadable_image' }
   }
