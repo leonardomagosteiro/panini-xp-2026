@@ -1,5 +1,6 @@
 import { TextractClient, AnalyzeExpenseCommand, type ExpenseField } from '@aws-sdk/client-textract'
 import type { ExtractedData, ImageMimeType } from './extract-receipt'
+import { matchStoreSignature } from './store-signatures'
 
 const HIGH_CONFIDENCE_THRESHOLD = 95
 const MEDIUM_CONFIDENCE_THRESHOLD = 70
@@ -189,8 +190,23 @@ export async function extractReceiptTextract(
   const dateConfidence = dateField?.ValueDetection?.Confidence ?? null
   const date = dateText ? parseReceiptDate(dateText) : null
 
-  const cnpj = cnpjMatch?.cnpj ?? null
-  const cnpjConfidence = cnpjMatch?.confidence ?? null
+  // Signature-match fallback: when the strict CNPJ regex fails, try matching
+  // known store signatures (vendor name, address, bare CNPJ in any format).
+  // See lib/store-signatures.ts for the rules.
+  let cnpj = cnpjMatch?.cnpj ?? null
+  let cnpjConfidence = cnpjMatch?.confidence ?? null
+  let storeMatchSource: string | null = null
+  if (cnpj === null) {
+    const storeMatch = matchStoreSignature(response)
+    if (storeMatch) {
+      cnpj = storeMatch.canonicalCnpj
+      // Synthetic confidence: high enough to clear the medium threshold so
+      // the validator no longer routes the receipt as invalid_cnpj.
+      // Not 'high' enough to risk auto-approve (which is clamped anyway).
+      cnpjConfidence = 90
+      storeMatchSource = `${storeMatch.storeName}:${storeMatch.matchSource}`
+    }
+  }
 
   const receiptNumber = findReceiptNumber(summary)
 
@@ -203,7 +219,8 @@ export async function extractReceiptTextract(
     `cnpj=${cnpj ?? 'none'} (${cnpjConfidence?.toFixed(1) ?? '-'}%)`,
     `vendor=${vendorField?.ValueDetection?.Text ?? 'none'}`,
     `other_count=${getOtherFields(summary).length}`,
-  ].join(' | ')
+    storeMatchSource ? `store_match=${storeMatchSource}` : '',
+  ].filter(Boolean).join(' | ')
 
   return {
     is_receipt: hasAnySignal,
