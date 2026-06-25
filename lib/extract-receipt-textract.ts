@@ -108,42 +108,68 @@ function findReceiptNumber(fields: ExpenseField[]): string | null {
   return null
 }
 
-// NOTE: Textract has been observed to report >=95% confidence on digit misreads
-// (e.g., 84.00 returned as 884.00 with high confidence). We do not trust Textract's
-// 'high' confidence as a basis for auto-approval. The classification logic below
-// preserves the calibration math, but we CLAMP the output to a maximum of 'medium'.
-// 'medium' routes to needs_review (human verification) via the existing validator.
+// AUTO-APPROVE GATING
+// -------------------
+// Textract has been observed to report >=95% confidence on digit misreads
+// (e.g., R$84 read as R$884 at 99% confidence). Raw Textract confidence alone is
+// NOT a sufficient gate for auto-approval.
 //
-// To re-enable auto-approve in the future, remove the clamp at the bottom of this
-// function.
-function computeConfidence(
-  totalConfidence: number | null,
-  cnpjConfidence: number | null,
+// Auto-approve ('high' classification) requires ALL of the following:
+//   1. CNPJ is DMCAMP (matched by store-signature or strict regex)
+//   2. Amount is in [R$50, R$200] inclusive (covers typical purchase range;
+//      excludes both "$5 misread of $50" and "$884 misread of $84")
+//   3. Amount field confidence >= 80%
+//   4. Date field confidence >= 80%
+//
+// Everything else routes to needs_review for human verification.
+// EBANCAS receipts are intentionally NOT auto-approved today (signatures not yet added).
+const AUTO_APPROVE_DMCAMP_CNPJ = '07.348.198/0001-48'
+const AUTO_APPROVE_MIN_AMOUNT_BRL = 50
+const AUTO_APPROVE_MAX_AMOUNT_BRL = 200
+const AUTO_APPROVE_FIELD_CONFIDENCE_THRESHOLD = 80
+
+interface AutoApproveInputs {
+  cnpj: string | null
+  amountBrl: number | null
+  totalConfidence: number | null
+  cnpjConfidence: number | null
   dateConfidence: number | null
+}
+
+function meetsAutoApproveCriteria(inputs: AutoApproveInputs): boolean {
+  if (inputs.cnpj !== AUTO_APPROVE_DMCAMP_CNPJ) return false
+  if (inputs.amountBrl === null) return false
+  if (inputs.amountBrl < AUTO_APPROVE_MIN_AMOUNT_BRL) return false
+  if (inputs.amountBrl > AUTO_APPROVE_MAX_AMOUNT_BRL) return false
+  if (inputs.totalConfidence === null) return false
+  if (inputs.totalConfidence < AUTO_APPROVE_FIELD_CONFIDENCE_THRESHOLD) return false
+  if (inputs.dateConfidence === null) return false
+  if (inputs.dateConfidence < AUTO_APPROVE_FIELD_CONFIDENCE_THRESHOLD) return false
+  // cnpjConfidence is not strictly checked beyond the synthetic 90 from store-signature
+  // match (which clears 80) or whatever Textract reported on regex match.
+  return true
+}
+
+function computeConfidence(
+  inputs: AutoApproveInputs
 ): 'high' | 'medium' | 'low' {
+  const { totalConfidence, cnpjConfidence, dateConfidence } = inputs
+
   if (totalConfidence === null || cnpjConfidence === null || dateConfidence === null) {
     return 'low'
   }
-  let classification: 'high' | 'medium' | 'low'
-  if (
-    totalConfidence >= HIGH_CONFIDENCE_THRESHOLD &&
-    cnpjConfidence >= HIGH_CONFIDENCE_THRESHOLD &&
-    dateConfidence >= HIGH_CONFIDENCE_THRESHOLD
-  ) {
-    classification = 'high'
-  } else if (
+
+  // Medium tier: all three fields above the medium threshold.
+  const meetsMedium =
     totalConfidence >= MEDIUM_CONFIDENCE_THRESHOLD &&
     cnpjConfidence >= MEDIUM_CONFIDENCE_THRESHOLD &&
     dateConfidence >= MEDIUM_CONFIDENCE_THRESHOLD
-  ) {
-    classification = 'medium'
-  } else {
-    classification = 'low'
-  }
 
-  // CLAMP: never return 'high' — Textract confidence is not yet trusted enough
-  // for auto-approve. See note above.
-  return classification === 'high' ? 'medium' : classification
+  if (!meetsMedium) return 'low'
+
+  // High tier: medium-tier AND auto-approve criteria met.
+  if (meetsAutoApproveCriteria(inputs)) return 'high'
+  return 'medium'
 }
 
 export async function extractReceiptTextract(
@@ -211,7 +237,13 @@ export async function extractReceiptTextract(
   const receiptNumber = findReceiptNumber(summary)
 
   const hasAnySignal = !!(totalField || vendorField || cnpjMatch)
-  const confidence = computeConfidence(totalConfidence, cnpjConfidence, dateConfidence)
+  const confidence = computeConfidence({
+    cnpj,
+    amountBrl: amount,
+    totalConfidence,
+    cnpjConfidence,
+    dateConfidence,
+  })
 
   const notes = [
     `Textract: total=${totalText ?? 'none'} (${totalConfidence?.toFixed(1) ?? '-'}%)`,

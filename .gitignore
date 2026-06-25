@@ -36,3 +36,4 @@ yarn-error.log*
 next-env.d.ts
 predict-backlog-results.json
 reprocess-backlog-results.json
+reprocess-cnpj-null-results.json
