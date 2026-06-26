@@ -122,7 +122,7 @@ export default function AdminRevisaoPage() {
   const [loginLoading, setLoginLoading] = useState(false)
 
   const [activeAction, setActiveAction] = useState<ActiveAction | null>(null)
-  const [bucket, setBucket] = useState<'all' | 'ready' | 'amount' | 'cnpj' | 'ebancas' | 'empty'>('all')
+  const [bucket, setBucket] = useState<'all' | 'ready' | 'amount' | 'cnpj' | 'ebancas' | 'empty' | 'outros'>('all')
   const [approveCount, setApproveCount] = useState('1')
   const [rejectReason, setRejectReason] = useState<AdminRejectionReason | ''>('')
   const [reprocessEmail, setReprocessEmail] = useState('')
@@ -396,6 +396,7 @@ export default function AdminRevisaoPage() {
                   { key: 'cnpj', label: 'Verificar CNPJ' },
                   { key: 'ebancas', label: 'EBANCAS' },
                   { key: 'empty', label: 'Sem dados' },
+                  { key: 'outros', label: 'Outros' },
                 ] as const).map(tab => (
                   <button
                     key={tab.key}

@@ -63,7 +63,12 @@ export async function GET(req: NextRequest) {
     .eq('status', 'needs_review')
     .order('created_at', { ascending: true })
 
-  if (bucket === 'ready') {
+  if (bucket === 'outros') {
+    // 'Outros': fetch all, then filter in-memory to receipts that don't match any specific bucket.
+    // We do this in-memory because expressing the negation across multiple OR conditions in
+    // PostgREST is hairy. The list is small enough (~150 receipts) that in-memory filtering is fine.
+    // The filter happens AFTER the await below — see "outros filter" comment.
+  } else if (bucket === 'ready') {
     // 'Pronto para aprovar': all core fields set, amount in valid range,
     // CNPJ is NOT EBANCAS (default DMCAMP-all-data-present case).
     query = query
@@ -94,7 +99,29 @@ export async function GET(req: NextRequest) {
   }
   // 'all' or unrecognized bucket: no extra filter
 
-  const { data, error } = await query
+  const { data: rawData, error } = await query
+
+  // Apply outros filter in-memory
+  type DataRow = { cnpj_on_receipt: string | null; amount_on_receipt: number | null; receipt_date: string | null }
+  let data: typeof rawData = rawData
+  if (bucket === 'outros' && rawData) {
+    const isEbancas = (cnpj: string | null) => cnpj !== null && EBANCAS_CNPJS.includes(cnpj)
+    const isReady = (r: DataRow) =>
+      r.cnpj_on_receipt !== null && r.receipt_date !== null &&
+      r.amount_on_receipt !== null && r.amount_on_receipt >= 50 && r.amount_on_receipt <= 200 &&
+      !isEbancas(r.cnpj_on_receipt)
+    const isAmount = (r: DataRow) =>
+      r.cnpj_on_receipt !== null && r.receipt_date !== null &&
+      (r.amount_on_receipt === null || r.amount_on_receipt > 200)
+    const isCnpj = (r: DataRow) =>
+      r.cnpj_on_receipt === null && r.receipt_date !== null &&
+      r.amount_on_receipt !== null && r.amount_on_receipt >= 50 && r.amount_on_receipt <= 200
+    const isEmpty = (r: DataRow) =>
+      r.cnpj_on_receipt === null && r.amount_on_receipt === null
+    data = rawData.filter((r: any) =>
+      !isReady(r) && !isAmount(r) && !isCnpj(r) && !isEbancas(r.cnpj_on_receipt) && !isEmpty(r)
+    )
+  }
 
   if (error) {
     return NextResponse.json({ error: 'Erro ao buscar recibos' }, { status: 500 })
