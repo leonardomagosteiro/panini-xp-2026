@@ -63,7 +63,17 @@ export async function GET(req: NextRequest) {
     .eq('status', 'needs_review')
     .order('created_at', { ascending: true })
 
-  if (bucket === 'amount') {
+  if (bucket === 'ready') {
+    // 'Pronto para aprovar': all core fields set, amount in valid range,
+    // CNPJ is NOT EBANCAS (default DMCAMP-all-data-present case).
+    query = query
+      .not('cnpj_on_receipt', 'is', null)
+      .not('receipt_date', 'is', null)
+      .not('amount_on_receipt', 'is', null)
+      .gte('amount_on_receipt', 50)
+      .lte('amount_on_receipt', 200)
+      .not('cnpj_on_receipt', 'in', `(${EBANCAS_CNPJS.map(c => `"${c}"`).join(',')})`)
+  } else if (bucket === 'amount') {
     query = query
       .not('cnpj_on_receipt', 'is', null)
       .not('receipt_date', 'is', null)
