@@ -28,7 +28,21 @@ export async function GET(req: NextRequest) {
 
   const supabase = createAdminClient()
 
-  const { data, error } = await supabase
+  // Bucket-based filtering for review workflow.
+  // 'all' (default): every needs_review receipt
+  // 'amount': CNPJ + date set, amount is null or > 200 (only need to verify amount)
+  // 'cnpj': amount in range + date set, CNPJ is null (only need to verify CNPJ)
+  // 'ebancas': CNPJ matches an EBANCAS CNPJ (need visual confirmation it's EBANCAS)
+  // 'empty': amount and CNPJ both null (the hardest cases)
+  const url = new URL(req.url)
+  const bucket = url.searchParams.get('bucket') ?? 'all'
+
+  const EBANCAS_CNPJS = [
+    '54.511.074/0001-11', '54511074000111',
+    '54.511.074/0002-00', '54511074000200',
+  ]
+
+  let query = supabase
     .from('receipts')
     .select(`
       id,
@@ -48,6 +62,29 @@ export async function GET(req: NextRequest) {
     `)
     .eq('status', 'needs_review')
     .order('created_at', { ascending: true })
+
+  if (bucket === 'amount') {
+    query = query
+      .not('cnpj_on_receipt', 'is', null)
+      .not('receipt_date', 'is', null)
+      .or('amount_on_receipt.is.null,amount_on_receipt.gt.200')
+  } else if (bucket === 'cnpj') {
+    query = query
+      .is('cnpj_on_receipt', null)
+      .not('amount_on_receipt', 'is', null)
+      .gte('amount_on_receipt', 50)
+      .lte('amount_on_receipt', 200)
+      .not('receipt_date', 'is', null)
+  } else if (bucket === 'ebancas') {
+    query = query.in('cnpj_on_receipt', EBANCAS_CNPJS)
+  } else if (bucket === 'empty') {
+    query = query
+      .is('cnpj_on_receipt', null)
+      .is('amount_on_receipt', null)
+  }
+  // 'all' or unrecognized bucket: no extra filter
+
+  const { data, error } = await query
 
   if (error) {
     return NextResponse.json({ error: 'Erro ao buscar recibos' }, { status: 500 })

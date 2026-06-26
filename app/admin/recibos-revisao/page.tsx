@@ -122,6 +122,7 @@ export default function AdminRevisaoPage() {
   const [loginLoading, setLoginLoading] = useState(false)
 
   const [activeAction, setActiveAction] = useState<ActiveAction | null>(null)
+  const [bucket, setBucket] = useState<'all' | 'amount' | 'cnpj' | 'ebancas' | 'empty'>('all')
   const [approveCount, setApproveCount] = useState('1')
   const [rejectReason, setRejectReason] = useState<AdminRejectionReason | ''>('')
   const [reprocessEmail, setReprocessEmail] = useState('')
@@ -131,7 +132,7 @@ export default function AdminRevisaoPage() {
   async function fetchReceipts() {
     setFetchError('')
     try {
-      const res = await fetch('/api/admin/receipts-needs-review')
+      const res = await fetch(`/api/admin/receipts-needs-review?bucket=${bucket}`)
       if (res.status === 401) {
         setPageState('login')
         return
@@ -153,7 +154,7 @@ export default function AdminRevisaoPage() {
   useEffect(() => {
     fetchReceipts()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [bucket])
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -386,6 +387,33 @@ export default function AdminRevisaoPage() {
             {receipts.length} pendente{receipts.length !== 1 ? 's' : ''}
           </span>
         </div>
+
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12, marginBottom: 16 }}>
+                {([
+                  { key: 'all', label: 'Todos' },
+                  { key: 'amount', label: 'Verificar valor' },
+                  { key: 'cnpj', label: 'Verificar CNPJ' },
+                  { key: 'ebancas', label: 'EBANCAS' },
+                  { key: 'empty', label: 'Sem dados' },
+                ] as const).map(tab => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setBucket(tab.key)}
+                    style={{
+                      padding: '6px 14px',
+                      borderRadius: 6,
+                      border: bucket === tab.key ? `2px solid ${BRAND.yellow}` : '1px solid #444',
+                      background: bucket === tab.key ? BRAND.yellow : 'transparent',
+                      color: bucket === tab.key ? '#000' : '#ccc',
+                      fontSize: 13,
+                      fontWeight: bucket === tab.key ? 600 : 400,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
 
         {fetchError && (
           <p style={{ color: '#ff6b6b', fontSize: 14, marginBottom: 16 }}>{fetchError}</p>
