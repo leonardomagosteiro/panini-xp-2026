@@ -129,10 +129,67 @@ No code shipped. Platform stable in production. Manual review of `needs_review` 
 
 ---
 
+### June 25 — AWS Textract integration + DMCAMP signature matcher + bucketed manual review UI
+
+**Context:** Full-day session driving toward the June 26 announcement deadline. Started with the 30-min reality check: 5/5 randomly sampled needs_review JPEGs were readable. Textract fork locked.
+
+**Shipped (seven commits, all on `main`, pushed):**
+
+- `74dcce1` — **AWS Textract integration.** `lib/extract-receipt-textract.ts` (Textract AnalyzeExpense adapter with strict CNPJ regex, Brazilian amount + Portuguese date parsing, three-field combined confidence over TOTAL + CNPJ + INVOICE_RECEIPT_DATE). Initial confidence CLAMPED to 'medium' max — auto-approve disabled. `lib/process-receipt.ts` adds Textract as third provider in the `AI_EXTRACTION_PROVIDER` env switch + `SUPPRESS_MANUAL_REVIEW_EMAIL` flag for batch reprocessing. `lib/validate-receipt.ts` Pre-check 0 tightened to require ALL three fields null (was: `cnpj === null` alone, which was over-aggressive). Admin page shows extracted amount/CNPJ/date inline.
+- `2012251` — **Full-width receipt image + reprocess pipeline.** Receipt image card goes from `maxHeight: 180` (tiny thumbnail) to `width: 100%, maxHeight: 800` (readable end-to-end without opening in new tab). Signed URL TTL from 1h to 8h for long review sessions. `lib/reprocess-receipt-textract.ts` (idempotent reprocess on any receipt status, unlike the original `processReceipt` which short-circuits on `status !== 'uploaded'`). `scripts/reprocess-backlog.ts` (full-backlog driver with per-receipt timeout, resumable JSON state, progress logging).
+- `aeda648` — **DMCAMP store-signature matcher rescues 86% of CNPJ-null receipts.** `lib/store-signatures.ts` uses three rules: (1) bare CNPJ scan in OTHER fields — no label requirement, handles "CHPJ"/"CNDJ"/"C NPJ" OCR misreads — (2) "DMCAMP"/"DM CAMP" name substring in VENDOR_NAME/VENDOR_ADDRESS/NAME fields, (3) address signature: "RIBEIRAO BONITO" + "430" OR CEP "13030120" anywhere in any address field. Synthetic 90% confidence when matched. Verified across two 30-receipt samples: 83.3% then 86.7% rescue rate; 0 false positives in 60 image-verified receipts.
+- `98103c7` — **Narrow auto-approve for DMCAMP.** Replaces the blanket confidence clamp. Auto-approve ('high') requires: CNPJ is DMCAMP + amount in [R$50, R$200] + amount confidence ≥80% + date confidence ≥80%. Defense-in-depth: validator's per-field checks (null date, duplicate, etc.) still apply after extractor returns 'high'. Verified by spot-checking 8 candidates from a 50-sample: 7/7 image-matched, 8th would route to needs_review via validator's null-date check.
+- `7d66aec` — **Bucket-filter tabs for manual review.** 5 buckets (Todos, Verificar valor, Verificar CNPJ, EBANCAS, Sem dados) collapse the reviewer's mental context-switch load. Server-side filter via `?bucket=` query param. Discovered post-deploy that the 5 buckets did not sum to Todos — leading to:
+- `e1169cb` — **'Pronto p/ aprovar' bucket added.** Caught ~314 uncategorized receipts: CNPJ set + amount in [50,200] + date set + CNPJ not EBANCAS. These are the fastest reviews (everything's correct, just click) so positioned as first tab after 'Todos'. Math still didn't reconcile — leading to:
+- `87c29ef` — **'Outros' catch-all bucket added.** Diagnostic counted 7 edge-case patterns totaling ~150 receipts (missing date, amount <R$50, big amount no CNPJ, etc.). None individually big enough to deserve its own bucket. 'Outros' is in-memory negation (fetch all, drop anything matching specific bucket predicates). Math now reconciles: Pronto + Verificar valor + Verificar CNPJ + EBANCAS + Sem dados + Outros = Todos.
+
+**Operational runs performed:**
+
+- **Reality check** (`scripts/reality-check-sample.ts`): 5/5 receipts human-readable. Textract fork chosen.
+- **Smoke test** (`scripts/textract-smoke-test.ts`): 5 receipts. Findings: Textract correctly extracts amounts where OpenAI returned null. Textract's `VENDOR_NAME` is often the payment processor (PagBank, pagvendas), not the merchant — CNPJ in OTHER fields is the load-bearing field. Textract reports >95% confidence on digit misreads (R$84 read as R$884 at 99.8%).
+- **Backlog predict run** (`scripts/predict-backlog.ts`): full-backlog dry-run with caching. After validator fix, projection on a 337-receipt sample: 86% needs_review, 5% awaiting_reupload, 3% approved, 3% timeout, 1.8% invalid_cnpj.
+- **Full reprocess** (`scripts/reprocess-backlog.ts`) on 1,232 needs_review receipts. Outcome: 1,096 → needs_review (Textract data now stored on each row), 113 → awaiting_reupload (reupload emails fired), 18 → timeout errors, 5 → rejected. ~$60 in Textract cost. ~2 hours.
+- **Store-signature inspection** (`scripts/inspect-textract-full.ts`): full Textract response dump for 5 random needs_review receipts where Textract didn't extract a CNPJ. Goldmine — drove the three signature rules.
+- **Store-signature tests** (`scripts/test-store-signatures.ts` + `scripts/sample-store-signatures.ts`): 5 hand-picked + two 30-receipt samples. Iterations: dropped the "label must include CNPJ" requirement after seeing "CHPJ" misreads; added CEP rule after seeing the FORCARD-mangled-vendor-name case (Receipt 3).
+- **Auto-approve sample** (`scripts/predict-auto-approve-sample.ts`): 50 receipts. 8 candidates spot-checked manually — 7/7 image-matched.
+- **Second reprocess** on all 1,070 needs_review (post-store-signature, post-auto-approve). Outcome: 85 approved (auto-approve fired), 185 rejected (duplicates now detectable via store-signature CNPJ), 34 timeout errors, 766 → needs_review with Textract data populated.
+
+**Key learnings:**
+
+1. **Textract returns high confidence on digit misreads.** R$84 read as R$884 at 99.8%. Raw confidence is not a sufficient auto-approve gate. The R$50-R$200 amount range + 80% per-field confidence threshold is the actual protection.
+2. **Store-signature matching is high-precision.** Across 60 image-verified receipts, 0 false positives. Bare CNPJ exact match + name substring + CEP signature are each sufficient evidence on their own.
+3. **PostgREST 1,000-row cap is permanent.** Caught during reality check when 1,229 expected returned exactly 1000. `lib/paginate-query.ts` (`fetchAllRows()`) added; CLAUDE.md updated with pagination discipline.
+4. **`processReceipt` is the upload pipeline, not the reprocess pipeline.** Status guard at the top short-circuits on `status !== 'uploaded'`. Reprocessing needs a different entry point — `reprocessReceiptWithTextract` is that primitive.
+5. **Bucketing the review queue removes context-switching cost**, not just visual clutter. Mental load drops when the reviewer processes one bucket's "what am I checking" question at a time.
+6. **The reviewer's verification still matters.** Pre-fill is a suggestion, not a fact. The 884-vs-84 misread case repeats. Glance at the image; confirm pre-filled amount matches; only then click approve.
+7. **No-email customers approved anyway, WhatsApp as fallback.** Codes are generated regardless of email. Post-deadline: build admin export flagging no-email approved customers.
+
+**Post-day DB state at close:**
+
+- uploaded: 3
+- processing: 0
+- approved: **891** (+117 from June 24 close)
+- rejected: **297** (+215 — store-signature unlocked dedupe)
+- needs_review: **791** (–438 from June 24)
+- awaiting_reupload: **117** (+114 — true unreadables routed correctly, reupload emails sent)
+- Total: 2,099
+
+The 791 needs_review queue is the queue to clear tomorrow via bucketed manual review.
+
+---
+
 ## 6. Phase 2 commits
 
 | Hash | Date | Subject |
 |---|---|---|
+| 87c29ef | 2026-06-25 | feat(admin): add 'Outros' catch-all bucket |
+| e1169cb | 2026-06-25 | feat(admin): add 'Pronto p/ aprovar' bucket (default DMCAMP, all data present) |
+| 7d66aec | 2026-06-25 | feat(admin): bucket-filter tabs for faster manual review |
+| 98103c7 | 2026-06-25 | feat(ocr): enable narrow auto-approve for DMCAMP receipts |
+| aeda648 | 2026-06-25 | feat(ocr): DMCAMP store-signature matcher rescues 86% of CNPJ-null receipts |
+| 2012251 | 2026-06-25 | feat(admin): full-width receipt image + reprocess pipeline |
+| 74dcce1 | 2026-06-25 | feat(ocr): AWS Textract integration for receipt extraction |
+| 2fb2cd5 | 2026-06-25 | feat(scripts): reality check + Textract dry-run scripts (paginate-query helper) |
 | 3523557 | 2026-06-24 | feat(validator): fuzzy CNPJ match (distance <= 2) for receipt validation |
 | df8133f | 2026-05-08 | feat(upload): mention auto-resize in photo guidance section |
 | 7dafe11 | 2026-05-08 | feat(upload): integrate client-side resize into receipt upload flow |
@@ -177,36 +234,47 @@ No code shipped. Platform stable in production. Manual review of `needs_review` 
 - 7-day re-upload cron + first/second strike detection
 - Admin review queue at `/admin/recibos-revisao` (password-protected)
 - Backlog processor available for catch-up runs
+- AWS Textract AnalyzeExpense as the active OCR extractor (`AI_EXTRACTION_PROVIDER=textract`)
+- DMCAMP store-signature matcher rescues receipts where Textract's strict CNPJ regex fails (vendor name, CEP, or bare CNPJ in any OTHER field)
+- Narrow auto-approve for DMCAMP: CNPJ matched + amount R$50–R$200 + amount/date confidence ≥80% → 'high' confidence → validator auto-approves and generates codes
+- Bucketed admin review UI at `/admin/recibos-revisao`: Todos / Pronto p/ aprovar / Verificar valor / Verificar CNPJ / EBANCAS / Sem dados / Outros (each tab filters server-side; pre-fills codes_count from extracted amount; full-width receipt image)
+- Reprocess pipeline (`lib/reprocess-receipt-textract.ts` + `scripts/reprocess-backlog.ts`): idempotent, resumable, per-receipt timeout, `SUPPRESS_MANUAL_REVIEW_EMAIL` flag for batch operations
+- `lib/paginate-query.ts` (`fetchAllRows`) — discipline for working around PostgREST's 1000-row cap
 
 ---
 
 ## 8. What's broken or fragile
 
-### Critical — active production issue
+### Active production issue (reduced, not eliminated)
 
-**AI extraction unreliable across both providers tried.** May 7 (Anthropic) showed 60% false-rejection rate on CNPJ. May 9 switched to OpenAI gpt-4o. June 24 health check confirms OpenAI has similar reliability problems — different failure shape, similar customer impact.
+**AI extraction reliability remains the structural bottleneck even with AWS Textract live.** The June 25 reprocess auto-approved only 85 of 1,070 receipts (~8%) — far from the goal of clearing the queue without manual review. Textract is more accurate on structured field extraction than Anthropic or OpenAI (it returns amounts where they returned null, and parses TOTAL/CNPJ/DATE into typed fields), but **it still produces digit misreads at high confidence** (R$84 → R$884 at 99.8%). That single failure mode is why auto-approve had to be narrowed to a R$50-R$200 amount range + ≥80% per-field confidence + DMCAMP CNPJ.
 
-**Observed OpenAI failure modes:**
-- Wrong CNPJ digits with high confidence (not low-conf, just wrong)
-- Dropped digits — receipts coming back with 12-13 digit CNPJ strings
-- Null amounts on legible receipts (high confidence, but `amount_total_brl` returned null)
-- Inconsistency: same receipt produces different extractions on different runs
+**Observed Textract failure modes:**
+- Digit misreads at >95% confidence on the amount field (the core risk; the R$50-R$200 range is the only practical guard).
+- Mislabeled OTHER fields (`CNPJ` OCR'd as `CHPJ`, `CNDJ`, `C NPJ`) — caught by the store-signature matcher which scans values regardless of label.
+- VENDOR_NAME often returns the payment processor (PagBank, pagvendas) instead of the merchant — store-signature matcher reaches into VENDOR_ADDRESS and OTHER fields.
+- Date parse failures: Textract returns the date string at high confidence, but parser cannot decode it (e.g., Portuguese month abbreviations Textract didn't normalize). Validator's null-date check catches these as the second line of defense.
+- ~3% of reprocess attempts timed out (>45s/receipt). Those receipts kept their previous state and have no Textract data populated.
 
 **Mitigations in place (not fixes):**
 - May 8 — OCR-dependent rejections route to `needs_review` (commit `42c672f`)
 - May 8 — photo guidance on upload page (commit `319515e`)
-- June 24 — fuzzy CNPJ matching at distance ≤ 2 (commit `3523557`)
+- June 24 — fuzzy CNPJ matching at distance ≤ 2 in the validator (commit `3523557`)
+- June 25 — AWS Textract with three-field combined confidence (commit `74dcce1`)
+- June 25 — DMCAMP store-signature matcher (commit `aeda648`)
+- June 25 — narrow auto-approve gate, confidence ≥80% + amount R$50–R$200 (commit `98103c7`)
+- June 25 — bucketed manual review UI (commits `7d66aec` + `e1169cb` + `87c29ef`)
 
-**Real fix candidates (June 24 analysis):**
-- Purpose-built receipt OCR APIs (AWS Textract AnalyzeExpense, Google Document AI, Azure Document Intelligence) likely outperform general LLMs on structured field extraction from receipts.
-- AWS Textract identified as primary candidate.
-- Evaluation deferred to June 25 morning session — see Section 16.
+**Real residual issues (June 25 finding):**
+- EBANCAS receipts (~117 in queue) have no store-signature matcher yet; they are routed to a dedicated bucket for visual confirmation but cannot auto-approve.
+- 34 timeout-error receipts from the June 25 reprocess have no Textract data; they live in needs_review without bucketing-friendly metadata.
+- ~158 "Outros" receipts (mixed edge cases: missing date, amount <R$50, big amount + no CNPJ, etc.) require full manual review.
 
 ### Outstanding customer commitments
 
-- **needs_review queue: 1,229 receipts** (down from 1,320 pre-rescue). Must clear before June 26 to enable prize announcement email.
-- **awaiting_reupload queue: 3 receipts** — 7-day cron sends re-upload requests; customers can re-submit.
-- **166-customer recovery promise from May 7** — substantially fulfilled by June 24 rescue. Recipients whose receipts got rescued got an approval email; remainder are in the 1,229 needs_review queue.
+- **needs_review queue: 791 receipts** (down from 1,229 at June 24 close, 1,320 pre-rescue). Bucketed manual review is the path to clear this. June 26 is the hard deadline (announcement email requires the queue substantially cleared).
+- **awaiting_reupload queue: 117 receipts** — 7-day cron sends re-upload requests; customers can re-submit. These are true unreadables confirmed by Textract; reupload emails were fired during the June 25 reprocess run.
+- **166-customer recovery promise from May 7** — substantially fulfilled. Recipients whose receipts were approved got approval emails; the remainder are somewhere in the 791 needs_review or 117 awaiting_reupload queue.
 - **38 customers** without email on file — still unreachable, still queued for WhatsApp integration.
 
 ---
@@ -247,6 +315,12 @@ No code shipped. Platform stable in production. Manual review of `needs_review` 
 | 30 | Fuzzy CNPJ match at distance ≤ 2 | Levenshtein-based match against any of the 3 valid CNPJs. Helper isolated in lib/cnpj-match.ts with 21 unit tests. Step 7 (medium confidence gate) untouched | 2026-06-24 | Absorbs the most common OCR errors (single substitution, transposition) without admitting genuinely different CNPJs. Distance ≤ 3 considered but rejected as too permissive |
 | 31 | Surgical-scope backlog reprocess | Reset only the 273 invalid_cnpj receipts at distance ≤ 2; did not reprocess the rest of needs_review or the rejected pile | 2026-06-24 | Reprocessing receipts the validator change can't help burns OpenAI tokens for no outcome change. AI inconsistency means reprocessing clean duplicates could produce different extractions |
 | 32 | OCR provider evaluation: deferred to June 25 morning | 30-min reality check (open 5 random failed JPEGs) decides fork: if readable, AWS Textract; if not, manual review | 2026-06-24 | Switching providers costs 3-4h integration + risk; if photos are the bottleneck, switching doesn't help |
+| 33 | OCR provider (active) | Switch from OpenAI to AWS Textract AnalyzeExpense | 2026-06-25 | Reality check: 5/5 random needs_review JPEGs were human-readable — photos are not the bottleneck, OCR provider is. Textract is purpose-built for structured receipt extraction (typed TOTAL/DATE/VENDOR fields, OTHER fields for CNPJ). Env switch via `AI_EXTRACTION_PROVIDER=textract`, kill-switch preserved. |
+| 34 | Auto-approve scope: narrow | DMCAMP CNPJ + amount R\$50–R\$200 + amount confidence ≥80% + date confidence ≥80% | 2026-06-25 | Textract reported >95% confidence on R\$84 misread as R\$884. Raw confidence is not a sufficient gate. The R\$50–R\$200 range is the only practical protection against digit misreads. EBANCAS excluded: no store-signature matcher yet. |
+| 35 | CNPJ rescue: store-signature matcher | Three-rule fallback when strict CNPJ regex fails: (1) bare 14-digit scan in all OTHER field values, (2) "DMCAMP"/"DM CAMP" vendor name substring, (3) CEP 13030-120 or "RIBEIRAO BONITO"+"430" in any address field | 2026-06-25 | Textract often misreads the CNPJ label as "CHPJ"/"CNDJ"/"C NPJ" — dropping the label requirement and scanning values alone rescues those. Across 60 image-verified receipts: 86% rescue rate, 0 false positives. |
+| 36 | Pre-check 0 tightened | Fire only when ALL THREE of cnpj + amount + date are null (was: cnpj alone) | 2026-06-25 | The original rule was over-aggressive: a receipt where Textract extracted amount and date correctly but missed CNPJ was being immediately re-routed to awaiting_reupload before the store-signature matcher could help. |
+| 37 | Bucketed review UI | 7 tabs (Todos / Pronto p/ aprovar / Verificar valor / Verificar CNPJ / EBANCAS / Sem dados / Outros) with server-side filter | 2026-06-25 | Single-queue review requires constant context switching ("what am I checking?"). Buckets let the reviewer batch by verification type. 'Pronto p/ aprovar' bucket caught ~314 receipts the other buckets would have buried. 'Outros' in-memory negation reconciles the math. |
+| 38 | Batch reprocess flag: SUPPRESS_MANUAL_REVIEW_EMAIL | Env var guards `sendManualReviewEmailOnce` — set to 1 during batch reprocess runs | 2026-06-25 | Without suppression, every reprocessed receipt that lands in needs_review would fire Email I (manual review notice) to the customer — 1,000+ redundant emails during a batch run. |
 
 ---
 
@@ -325,45 +399,50 @@ Values stored in Apple Notes "Panini XP — Project Keys".
 
 ## 15. Last commit and branch state
 
-- **Last commit:** `3523557` — feat(validator): fuzzy CNPJ match (distance <= 2) for receipt validation (June 24)
+- **Last commit:** `87c29ef` — feat(admin): add 'Outros' catch-all bucket (June 25)
 - **Working tree:** clean (handoff update pending commit), all feature commits pushed to `origin/main`
-- **Vercel deploy:** B7Aqgr6Jh — live, status Ready, 1m 1s build, 1 non-blocking warning (uuid@10 deprecation transitive dependency)
+- **Vercel deploy:** latest commit `87c29ef` deployed to production at `app.paninixp.com.br`
+- **Today's commits, HEAD-first:** `87c29ef`, `e1169cb`, `7d66aec`, `98103c7`, `aeda648`, `2012251`, `74dcce1`, `2fb2cd5`
 
 ---
 
-## 16. The exact next step (next session — June 25 morning)
+## 16. The exact next step (next session — June 26 morning)
 
-**Goal:** clear the needs_review queue substantially before June 26 (deadline: participant email announcing the June 30 prize draw).
+**Goal:** clear the 791 needs_review queue via bucketed manual review, fast. June 26 is the announcement-email deadline.
 
-**30-minute reality check first:**
-1. Pull 5 random failed receipts from the current needs_review queue (mix of low_confidence, incomplete_extraction, date_out_of_window, awaiting_reupload buckets).
-2. Open each JPEG. Are they readable by a human in ~2 seconds?
-3. Decide the fork:
-   - **If 4/5 readable → Textract fork.** OpenAI is fumbling on legible receipts; purpose-built OCR will likely take approval rate from ~33% to ~70-80%. Worth integrating.
-   - **If 3/5 unreadable → Manual fork.** Photos are the bottleneck; switching AI providers won't help. Go straight to manual review.
+**Recommended order of operations:**
 
-**Textract fork (if chosen):** AWS account setup → `@aws-sdk/client-textract` install → `lib/extract-receipt-textract.ts` mirrors the OpenAI extractor signature → swap import in `process-receipt.ts` → local tests → deploy → reprocess backlog through new extractor (~45 min) → manual review on the ~250-350 receipts Textract can't auto-approve.
+1. **Plain Terminal startup check.** Verify clean tree, latest commit `87c29ef`, live DB counts roughly match the close numbers below (modulo any organic uploads overnight).
+2. **Open** `https://app.paninixp.com.br/admin/recibos-revisao` and log in.
+3. **Process buckets fastest-first:**
+   - **Pronto p/ aprovar** — bulk-approve. Pre-fill is correct in >90% of cases; just glance at the image to confirm the amount and click. Target: ~3 seconds per receipt.
+   - **Verificar valor** — only the amount needs checking. Type the correct amount, click approve.
+   - **Verificar CNPJ** — only the CNPJ needs visual confirmation (is the receipt from DMCAMP or EBANCAS?). If yes, approve; if not, reject as wrong_store.
+   - **EBANCAS** — visual confirmation that the receipt is from EBANCAS. (Auto-approve isn't enabled for EBANCAS — see Decision 36 follow-up below.)
+   - **Sem dados** — hardest bucket. Full image read, no pre-filled data.
+   - **Outros** — full image read, edge cases.
+4. **After manual review is substantially complete**, send the June 26 announcement email blast (existing email template + audience = approved participants).
 
-**Manual fork (if chosen):** Sort `/admin/recibos-revisao` by review_reason for batching. Aim for 20-30 seconds per receipt. 1,229 receipts at 25s = ~8.5 hours.
+**If time permits before the email blast:**
+- Re-run reprocess on the 34 timeout-error receipts from the June 25 reprocess (they have no Textract data; they're stuck in needs_review with bucketing-friendly metadata missing).
 
-**Hard cutoff:** if Textract integration isn't complete by lunch, abandon for the deadline and switch to manual review for the afternoon. No sunk-cost arguments.
+**Deferred (out of scope until after June 30 prize draw):**
 
-**Deferred (out of scope until after June 30):**
-- API key rotation (4 keys)
-- ADMIN_PASSWORD env var migration
-- schema.sql sync (drift confirmed)
+- EBANCAS store-signature matcher (would auto-approve ~117 receipts; not built today)
+- Admin export flagging no-email approved customers (for WhatsApp follow-up if any win the draw)
+- API key rotation (now 5 keys including AWS Textract)
+- ADMIN_PASSWORD env var migration (current password `panini2026` is in source — see CLAUDE.md)
+- schema.sql sync (drift on `awaiting_reupload` status, `reupload_request_sent_at`, `manual_review_email_sent_at`, plus today's columns: `amount_on_receipt`, `ai_confidence` enum values)
 - Old @anthropic-ai/sdk package removal
 - uuid@10 deprecation warning
-- Fix process-receipts-backlog.ts switch to print awaiting_reupload outcomes
-- Co-Authored-By: Claude trailer in commit c9e0d56 (May 9) — pact violation, decision pending
-- 3 OpenAI errors from June 24 wave 2: HEIC/unsupported image, missing participant row, malformed JSON
+- Fix `scripts/process-receipts-backlog.ts` switch to print `awaiting_reupload` outcomes
+- Co-Authored-By: Claude trailer in commit `c9e0d56` (May 9) — pact violation, decision pending
+- 3 OpenAI errors from June 24 wave 2 (HEIC, missing participant row, malformed JSON)
+- Loosen Textract strict-CNPJ-format regex (currently strict; spike fix today doesn't address this — see store-signature matcher rule 1 as the de facto fallback)
+- Reject-signal classifier for known non-store vendor names (LOJAS RENNER, Daiso, Outback, HAVAN, etc.) — would auto-reject ~50 receipts currently in needs_review
 
 ---
 
 ## 17. Suggested checkpoint
 
-**June 25 morning, before any code work:** After the 30-minute reality check, write down the fork decision (Textract or Manual) and reasoning in one sentence. Forces a deliberate choice instead of drifting into Textract because it's interesting.
-
-**If Textract fork — hard checkpoint at lunch:** Is integration complete and tested locally? If no, switch to manual review for the afternoon. No negotiation.
-
-**If manual fork — soft checkpoint every 2 hours:** Review pace, quality consistency, fatigue level. Adjust batching or break before quality drops.
+**June 26 morning, before opening the admin review page:** Estimate how many receipts you realistically expect to clear today and by when. If "all 791 by 4pm" feels unrealistic given the day's commitments, commit upfront to the announcement email going out with the queue at, say, 400 — and accept that the remaining 400 customers will get their outcome email in the days following the announcement rather than holding the entire batch hostage to a perfect queue clear.
