@@ -1,3 +1,5 @@
+export {}
+
 /**
  * Reusable one-off correction email: delivers a missed code to a customer
  * whose receipt was manually approved with fewer codes than they were owed.
