@@ -16,7 +16,7 @@ function formatBrDate(isoOrTimestamp: string): string {
 }
 
 // CTA button rendered as a table cell for maximum email client compatibility
-function ctaButton(label: string, url: string): string {
+export function ctaButton(label: string, url: string): string {
   return `<table cellpadding="0" cellspacing="0" role="presentation" style="margin:20px 0;">
   <tr>
     <td style="background:#111111;border-radius:6px;">
@@ -29,7 +29,7 @@ function ctaButton(label: string, url: string): string {
 // Wraps body HTML in the standard Panini XP logo + container email template.
 // Uses <table> layouts throughout for email client compatibility.
 // Inline styles only — no <style> blocks.
-function buildEmailHtml(bodyHtml: string): string {
+export function buildEmailHtml(bodyHtml: string): string {
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -72,7 +72,7 @@ function buildEmailHtml(bodyHtml: string): string {
 
 // Draw announcement block injected into outgoing emails while DRAW_ANNOUNCEMENT_ACTIVE=true.
 // Returns empty strings when the flag is off so callers need no conditional logic.
-function buildDrawBlock(variant: 'celebratory' | 'urgent' | 'patient'): { text: string; html: string } {
+export function buildDrawBlock(variant: 'celebratory' | 'urgent' | 'patient'): { text: string; html: string } {
   if (process.env.DRAW_ANNOUNCEMENT_ACTIVE !== 'true') {
     return { text: '', html: '' }
   }
