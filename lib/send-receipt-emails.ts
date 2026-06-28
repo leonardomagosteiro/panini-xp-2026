@@ -5,6 +5,9 @@ const FROM = 'Panini XP <copa2026@paninixp.com.br>'
 const REPLY_TO = 'campinas@paninixp.com.br'
 const REUPLOAD_URL = 'https://app.paninixp.com.br/enviar-recibo'
 const LOGO_URL = 'https://app.paninixp.com.br/logo-panini-xp.png'
+const INSTAGRAM_HANDLE = process.env.DRAW_INSTAGRAM_HANDLE || 'paninixp'
+const INSTAGRAM_ICON_URL = 'https://app.paninixp.com.br/instagram-icon.png'
+const PRIZE_IMAGE_URL = 'https://app.paninixp.com.br/prize-camiseta-brasil.png'
 
 function formatBrDate(isoOrTimestamp: string): string {
   return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(
@@ -53,6 +56,8 @@ function buildEmailHtml(bodyHtml: string): string {
           </tr>
           <tr>
             <td align="center" style="padding:16px 24px;border-top:1px solid #eeeeee;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#aaaaaa;">
+              <img src="${INSTAGRAM_ICON_URL}" width="16" height="16" alt="" style="display:inline-block;vertical-align:middle;border:0;margin-right:6px;" /><a href="https://instagram.com/${INSTAGRAM_HANDLE}" style="color:#aaaaaa;text-decoration:none;">@${INSTAGRAM_HANDLE}</a>
+              &nbsp;&middot;&nbsp;
               Equipe Panini XP &nbsp;&middot;&nbsp;
               <a href="https://paninixp.com.br" style="color:#aaaaaa;text-decoration:none;">paninixp.com.br</a>
             </td>
@@ -63,6 +68,59 @@ function buildEmailHtml(bodyHtml: string): string {
   </table>
 </body>
 </html>`
+}
+
+// Draw announcement block injected into outgoing emails while DRAW_ANNOUNCEMENT_ACTIVE=true.
+// Returns empty strings when the flag is off so callers need no conditional logic.
+function buildDrawBlock(variant: 'celebratory' | 'urgent' | 'patient'): { text: string; html: string } {
+  if (process.env.DRAW_ANNOUNCEMENT_ACTIVE !== 'true') {
+    return { text: '', html: '' }
+  }
+
+  const date = process.env.DRAW_DATE_DISPLAY || '30 de junho'
+  const handle = process.env.DRAW_INSTAGRAM_HANDLE || 'paninixp'
+  const instagramUrl = `https://instagram.com/${handle}`
+  const disclaimer = `Prêmio sujeito à disponibilidade na Centauro. Caso indisponível, oferecemos voucher de mesmo valor de compra na Centauro.`
+
+  let headline: string
+  let bodyPlain: string
+  let bodyHtml: string
+
+  if (variant === 'celebratory') {
+    headline = `Sorteio ao vivo em ${date}`
+    bodyPlain = `Seu(s) código(s) já estão na disputa! O sorteio acontece ao vivo no Instagram @${handle} no dia ${date}. O prêmio é uma Camiseta Oficial da Seleção Brasileira fornecida pela nossa parceira Centauro.`
+    bodyHtml = `Seu(s) código(s) já estão na disputa! O sorteio acontece ao vivo no Instagram <a href="${instagramUrl}" style="color:#333333;">@${handle}</a> no dia ${date}. O prêmio é uma <strong>Camiseta Oficial da Seleção Brasileira</strong> fornecida pela nossa parceira Centauro.`
+  } else if (variant === 'urgent') {
+    headline = `Reenvie seu recibo antes do sorteio`
+    bodyPlain = `O sorteio acontece ao vivo no Instagram @${handle} no dia ${date}. O prêmio é uma Camiseta Oficial da Seleção Brasileira fornecida pela nossa parceira Centauro. Para participar, reenvie a foto do seu recibo o quanto antes.`
+    bodyHtml = `O sorteio acontece ao vivo no Instagram <a href="${instagramUrl}" style="color:#333333;">@${handle}</a> no dia ${date}. O prêmio é uma <strong>Camiseta Oficial da Seleção Brasileira</strong> fornecida pela nossa parceira Centauro. Para participar, reenvie a foto do seu recibo <strong>o quanto antes</strong>.`
+  } else {
+    headline = `Sorteio ao vivo em ${date}`
+    bodyPlain = `O sorteio acontece ao vivo no Instagram @${handle} no dia ${date}. O prêmio é uma Camiseta Oficial da Seleção Brasileira fornecida pela nossa parceira Centauro. Enviaremos um e-mail confirmando o resultado da análise do seu recibo antes do sorteio.`
+    bodyHtml = `O sorteio acontece ao vivo no Instagram <a href="${instagramUrl}" style="color:#333333;">@${handle}</a> no dia ${date}. O prêmio é uma <strong>Camiseta Oficial da Seleção Brasileira</strong> fornecida pela nossa parceira Centauro. Enviaremos um e-mail confirmando o resultado da análise do seu recibo antes do sorteio.`
+  }
+
+  const text = `\n${headline}\n\n${bodyPlain}\n\n${disclaimer}\n\nAcompanhar no Instagram: ${instagramUrl}\n`
+
+  const html = `<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f5f5f5;border-radius:6px;margin:20px 0;">
+  <tr>
+    <td style="padding:16px 20px;">
+      <p style="font-size:16px;font-weight:bold;color:#111111;margin:0 0 12px 0;">${headline}</p>
+      <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin:0 0 12px 0;">
+        <tr>
+          <td align="center">
+            <img src="${PRIZE_IMAGE_URL}" alt="Camiseta Oficial da Seleção Brasileira" width="280" style="display:block;max-width:280px;width:100%;height:auto;border:0;border-radius:4px;" />
+          </td>
+        </tr>
+      </table>
+      <p style="font-size:15px;color:#333333;line-height:1.7;margin:0 0 12px 0;">${bodyHtml}</p>
+      <p style="font-size:12px;color:#888888;line-height:1.6;margin:0 0 12px 0;">${disclaimer}</p>
+      ${ctaButton('Acompanhar no Instagram', instagramUrl)}
+    </td>
+  </tr>
+</table>`
+
+  return { text, html }
 }
 
 // Email A — Approved with codes
@@ -77,6 +135,7 @@ export async function sendReceiptApproved(params: {
   const date = formatBrDate(params.uploadDate)
   const n = params.codes.length
   const codeList = params.codes.join('\n')
+  const drawBlock = buildDrawBlock('celebratory')
   const text = `Olá, ${params.nickname}!
 
 Seu recibo enviado em ${date} foi aprovado! Você ganhou ${n} código(s) para o sorteio da Copa do Mundo 2026:
@@ -87,7 +146,7 @@ Guarde este email com cuidado. Os códigos serão usados no sorteio dos prêmios
 
 Quer mais chances? Envie outro recibo:
 👉 ${REUPLOAD_URL}
-
+${drawBlock.text}
 Boa sorte!
 
 Equipe Panini XP`
@@ -105,6 +164,7 @@ Equipe Panini XP`
 <p>Guarde este email com cuidado. Os códigos serão usados no sorteio dos prêmios.</p>
 <p>Quer mais chances? Envie outro recibo:</p>
 ${ctaButton('Enviar novo recibo', REUPLOAD_URL)}
+${drawBlock.html}
 <p>Boa sorte!</p>`
 
   try {
@@ -407,6 +467,7 @@ export async function sendReceiptPleaseReupload(params: {
   isDelayedAnalysis?: boolean
 }): Promise<void> {
   const prefix = params.isDelayedAnalysis ? 'Recebemos seu recibo há alguns dias e finalizamos a análise agora.\n\n' : ''
+  const drawBlock = buildDrawBlock('urgent')
   const text = `${prefix}Olá, ${params.nickname}!
 
 Recebemos seu recibo, mas a imagem não está clara o suficiente para identificarmos as informações.
@@ -419,7 +480,7 @@ Por favor, tire uma nova foto do recibo com:
 
 Envie a nova foto aqui:
 👉 ${REUPLOAD_URL}
-
+${drawBlock.text}
 Equipe Panini XP`
 
   const prefixHtml = params.isDelayedAnalysis
@@ -438,7 +499,8 @@ ${prefixHtml}
   <li>Enquadramento completo (todo o recibo na foto)</li>
 </ul>
 <p>Envie a nova foto aqui:</p>
-${ctaButton('Enviar nova foto', REUPLOAD_URL)}`
+${ctaButton('Enviar nova foto', REUPLOAD_URL)}
+${drawBlock.html}`
 
   try {
     const resend = new Resend(process.env.RESEND_API_KEY)
@@ -466,6 +528,7 @@ export async function sendReceiptReuploadRequest(params: {
   nickname: string
   uploadDate: string
 }): Promise<void> {
+  const drawBlock = buildDrawBlock('urgent')
   const text = `Olá, ${params.nickname}!
 
 Recebemos seu recibo, mas a imagem não está nítida o suficiente para identificarmos as informações necessárias.
@@ -487,7 +550,7 @@ Para uma boa leitura:
 📸 Texto legível na foto
 
 👉 ${REUPLOAD_URL}
-
+${drawBlock.text}
 Equipe Panini XP`
 
   const bodyHtml = `
@@ -511,7 +574,8 @@ Equipe Panini XP`
   <li>📸 Todos os cantos visíveis</li>
   <li>📸 Texto legível na foto</li>
 </ul>
-${ctaButton('Enviar nova foto', REUPLOAD_URL)}`
+${ctaButton('Enviar nova foto', REUPLOAD_URL)}
+${drawBlock.html}`
 
   try {
     const resend = new Resend(process.env.RESEND_API_KEY)
@@ -539,6 +603,7 @@ export async function sendReceiptManualReviewNotification(params: {
   nickname: string
   uploadDate: string
 }): Promise<void> {
+  const drawBlock = buildDrawBlock('patient')
   const text = `Olá, ${params.nickname}!
 
 Recebemos seu recibo. Como a imagem precisa de uma análise mais cuidadosa, nosso time vai revisar manualmente em até 48 horas úteis.
@@ -546,14 +611,15 @@ Recebemos seu recibo. Como a imagem precisa de uma análise mais cuidadosa, noss
 Vamos te avisar por email assim que terminarmos. Se aprovado, você receberá seu(s) código(s).
 
 Obrigado pela paciência!
-
+${drawBlock.text}
 Equipe Panini XP`
 
   const bodyHtml = `
 <p>Olá, <strong>${params.nickname}</strong>!</p>
 <p>Recebemos seu recibo. Como a imagem precisa de uma análise mais cuidadosa, nosso time vai revisar manualmente em até <strong>48 horas úteis</strong>.</p>
 <p>Vamos te avisar por email assim que terminarmos. Se aprovado, você receberá seu(s) código(s).</p>
-<p>Obrigado pela paciência!</p>`
+<p>Obrigado pela paciência!</p>
+${drawBlock.html}`
 
   try {
     const resend = new Resend(process.env.RESEND_API_KEY)
