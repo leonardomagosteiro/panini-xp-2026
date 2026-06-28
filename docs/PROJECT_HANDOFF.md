@@ -1,7 +1,7 @@
 # Panini XP 2026 — Living Project Handoff
 
-**Last updated:** Wednesday, June 24, 2026, end of day Brazil time
-**Status:** Live. Production stable May 10 – June 23 (operational only, no shipped code). One feature shipped June 24 (fuzzy CNPJ match) — see Section 5.
+**Last updated:** Sunday, June 28, 2026, end of day Brazil time
+**Status:** Live. Queue cleared (0 needs_review). Part B (draw announcement pipeline mods) shipped to production. Part A (announcement blast) delivered to 1,297 customers. Eight feature/fix commits shipped today, plus this handoff commit.
 
 ---
 
@@ -178,10 +178,54 @@ The 791 needs_review queue is the queue to clear tomorrow via bucketed manual re
 
 ---
 
+### June 28 — Final queue clearance, draw announcement system shipped, blast delivered
+
+**Context:** Second active session since June 25. Started with the system at 791 needs_review receipts and the June 26 announcement-email deadline already 2 days slipped. Goal: clear the queue and ship the draw announcement end-to-end.
+
+**Two operational customer corrections caught and fixed during manual review:**
+
+- **Takeda case** (takeda.alex@gmail.com): a R$105 receipt had been approved with only 1 code instead of the correct 2. Fix: SQL transaction added 1 code, updated participant.code_count 1->2 and receipts.codes_generated 1->2, backfilled receipts.amount_on_receipt to 105.00. Sent a transparent correction email via Resend (id `934c5ccd-b2e3-4870-9078-a23f0ec64c5b`). The fix script was then generalized in the same session as `scripts/send-correction-email.ts` — a CLI tool with `--email`, `--nickname`, `--original-code`, `--new-code`, and `--amount` flags with input validation, reusable for any future undercount case.
+- **Andrea case** (deiaoandrade@hotmail.com / RB2026): the same physical receipt had been approved twice during manual review — once at 14:18 and again at 16:38 — generating 1 fraudulent extra code. Fix: SQL transaction deleted orphan code PXP-2026-KXQVU, decremented participant.code_count 8->7, marked the duplicate receipt status=rejected with rejection_reason=duplicate. Sent a transparent revocation email via Resend (id `704e276a-d89c-4892-b942-ba8be07deaa4`) listing the revoked code in strikethrough and confirming all 7 original codes remain valid.
+
+**Three same-customer duplicate uploads** (Lizarb, Rodrigo, Daiane) caught visually during manual review and properly rejected with rejection_reason=duplicate before approval — no codes were generated.
+
+**One suspicious customer flagged and resolved:** Juliano (julianodefreitasmoreira@hotmail.com) had 3 approved receipts with anomalies including 2 with null reviewed_by/reviewed_at and one stored receipt_date of 2006-06-08 (20 years pre-campaign). Case was raised with the team mid-session and resolved. Case closed.
+
+**Final queue clearance:** Started at 791 needs_review, ended at 0. 374 approved + 106 rejected via manual review (480 total decisions). Day-over-day deltas: approved 891->1,576 (+685, including auto-approvals during the day), rejected 297->493 (+196), needs_review 791->0, awaiting_reupload 117->41 (-76, customers re-uploaded after May/June reminders).
+
+**Part B shipped — draw block injection into customer-facing emails:**
+- `buildDrawBlock()` injected into 4 email functions: `sendReceiptApproved` (celebratory variant), `sendReceiptPleaseReupload` (urgent), `sendReceiptReuploadRequest` (urgent), `sendReceiptManualReviewNotification` (patient).
+- 5 rejection email functions deliberately left untouched — mentioning a draw to someone just told they are ineligible reads as taunting.
+- Architecture: env var feature flag (`DRAW_ANNOUNCEMENT_ACTIVE`, `DRAW_DATE_DISPLAY`, `DRAW_INSTAGRAM_HANDLE`). All three env vars added to Vercel for production (All Environments).
+- Persistent Instagram CTA (icon + @paninixp link) added to `buildEmailHtml` footer — applies to all 9 emails including rejections (this is branding, not promotion).
+- Two image assets shipped to `public/`: `instagram-icon.png` (48px, 3KB) and `prize-camiseta-brasil.png` (500px, 300KB).
+
+**Part A shipped — announcement blast:**
+- `scripts/send-draw-announcement.ts` blasted to 1,297 customers across two segments.
+- Approved segment: 1,273 received the celebratory variant ("you have codes, good luck").
+- Awaiting-reupload segment: 24 received the urgent variant ("re-upload before the draw").
+- 1 send failed due to a malformed email address (gnail.com typo — expected and acceptable).
+- Audience queries re-run at send time for fresh classification; participants with both approved and awaiting_reupload receipts deduped into the approved segment only.
+
+**Process discipline note:** The override-flag log bug — log lines printed the audience email (`p.email`) instead of the actual recipient (`to`), which briefly suggested the smoke test was sending to real customers despite the `--to` override. Resend dashboard verification confirmed both smoke-test sends correctly landed at leonardomagosteiro@gmail.com. Behavior was correct; the log was cosmetically wrong. Reinforced the "verify against the dashboard, never trust the log line" reflex.
+
+**Operational reminder:** After June 30 prize draw, flip `DRAW_ANNOUNCEMENT_ACTIVE=false` in Vercel to revert all draw blocks from the 4 customer-facing emails — no deploy required.
+
+---
+
 ## 6. Phase 2 commits
 
 | Hash | Date | Subject |
 |---|---|---|
+| 839145a | 2026-06-28 | docs(handoff): June 28 session update |
+| e4ae800 | 2026-06-28 | feat(scripts): one-time draw announcement blast |
+| 763d7ce | 2026-06-28 | feat(emails): draw announcement injection + persistent Instagram footer |
+| 1d8ae31 | 2026-06-28 | chore(public): add Brazilian National Team jersey image for draw block (500px, 300KB) |
+| db97fa4 | 2026-06-28 | chore(public): add Instagram icon for email footer (48px, 3KB) |
+| 9fb725c | 2026-06-28 | feat(scripts): one-off revocation email for duplicate receipt |
+| 5a8f8d6 | 2026-06-28 | feat(scripts): signed-urls helper for batch receipt audits |
+| 2a287ec | 2026-06-28 | fix(scripts): isolate module scope in send-correction-email.ts |
+| c75365b | 2026-06-28 | feat(scripts): generalize correction email into reusable CLI tool |
 | 87c29ef | 2026-06-25 | feat(admin): add 'Outros' catch-all bucket |
 | e1169cb | 2026-06-25 | feat(admin): add 'Pronto p/ aprovar' bucket (default DMCAMP, all data present) |
 | 7d66aec | 2026-06-25 | feat(admin): bucket-filter tabs for faster manual review |
@@ -240,6 +284,13 @@ The 791 needs_review queue is the queue to clear tomorrow via bucketed manual re
 - Bucketed admin review UI at `/admin/recibos-revisao`: Todos / Pronto p/ aprovar / Verificar valor / Verificar CNPJ / EBANCAS / Sem dados / Outros (each tab filters server-side; pre-fills codes_count from extracted amount; full-width receipt image)
 - Reprocess pipeline (`lib/reprocess-receipt-textract.ts` + `scripts/reprocess-backlog.ts`): idempotent, resumable, per-receipt timeout, `SUPPRESS_MANUAL_REVIEW_EMAIL` flag for batch operations
 - `lib/paginate-query.ts` (`fetchAllRows`) — discipline for working around PostgREST's 1000-row cap
+- Three exported helpers from `lib/send-receipt-emails.ts` (`buildEmailHtml`, `ctaButton`, `buildDrawBlock`) so scripts can render emails consistent with the in-pipeline design language
+- Feature-flagged draw announcement block (env var `DRAW_ANNOUNCEMENT_ACTIVE`) injected into 4 customer-facing emails with 3 variants (celebratory/urgent/patient) tailored to recipient state
+- Persistent Instagram CTA (icon + @paninixp link) in the footer of every email via `buildEmailHtml` wrapper
+- Generalized `scripts/send-correction-email.ts` CLI tool for future undercount cases (`--email`, `--nickname`, `--original-code`, `--new-code`, `--amount` flags with validation)
+- `scripts/signed-urls.ts` batch helper for receipt-image audits (generates time-limited signed URLs for any list of storage paths)
+- `scripts/send-draw-announcement.ts` blast tool with `--dry-run`, `--segment`, `--limit`, `--to` flags (audience query re-runs at send time, supports smoke testing without spamming real customers)
+- Two static image assets in `public/`: `instagram-icon.png` and `prize-camiseta-brasil.png`
 
 ---
 
@@ -269,6 +320,10 @@ The 791 needs_review queue is the queue to clear tomorrow via bucketed manual re
 - EBANCAS receipts (~117 in queue) have no store-signature matcher yet; they are routed to a dedicated bucket for visual confirmation but cannot auto-approve.
 - 34 timeout-error receipts from the June 25 reprocess have no Textract data; they live in needs_review without bucketing-friendly metadata.
 - ~158 "Outros" receipts (mixed edge cases: missing date, amount <R$50, big amount + no CNPJ, etc.) require full manual review.
+
+**June 28 additions:**
+- `scripts/send-draw-announcement.ts` log lines print the audience-record email (`p.email`) instead of the actual recipient. Cosmetic only; the Resend call correctly uses the `--to` override when set. Verified against the Resend dashboard during smoke testing. Fix queued for post-June 30.
+- Customers with no email on file received no announcement (missing from both segments). After June 30, build admin export listing approved customers with no email so the team can WhatsApp them with their draw status.
 
 ### Outstanding customer commitments
 
@@ -321,6 +376,14 @@ The 791 needs_review queue is the queue to clear tomorrow via bucketed manual re
 | 36 | Pre-check 0 tightened | Fire only when ALL THREE of cnpj + amount + date are null (was: cnpj alone) | 2026-06-25 | The original rule was over-aggressive: a receipt where Textract extracted amount and date correctly but missed CNPJ was being immediately re-routed to awaiting_reupload before the store-signature matcher could help. |
 | 37 | Bucketed review UI | 7 tabs (Todos / Pronto p/ aprovar / Verificar valor / Verificar CNPJ / EBANCAS / Sem dados / Outros) with server-side filter | 2026-06-25 | Single-queue review requires constant context switching ("what am I checking?"). Buckets let the reviewer batch by verification type. 'Pronto p/ aprovar' bucket caught ~314 receipts the other buckets would have buried. 'Outros' in-memory negation reconciles the math. |
 | 38 | Batch reprocess flag: SUPPRESS_MANUAL_REVIEW_EMAIL | Env var guards `sendManualReviewEmailOnce` — set to 1 during batch reprocess runs | 2026-06-25 | Without suppression, every reprocessed receipt that lands in needs_review would fire Email I (manual review notice) to the customer — 1,000+ redundant emails during a batch run. |
+| 39 | How to handle the over-approval correction for Andrea (revoke code + transparent email vs silent fix) | Full transparency: revocation email listing the revoked code in strikethrough, confirming all valid codes still active | 2026-06-28 | Customers will notice if a code stops working in the prize system; better to explain proactively than to handle support tickets after the draw. |
+| 40 | Architecture for the draw announcement injection | Env var feature flag (`DRAW_ANNOUNCEMENT_ACTIVE`/`DRAW_DATE_DISPLAY`/`DRAW_INSTAGRAM_HANDLE`) rather than date-check in code or permanent infrastructure | 2026-06-28 | Instant on/off without a deploy; timezone-safe; auditable via Vercel env-var history. The right time to design generalized "promotion injection" infrastructure is after this draw, with real-world learnings. |
+| 41 | Which email functions get the draw block | 4 functions only (approval, please-reupload, reupload-request, manual-review). 5 rejection emails deliberately unchanged. | 2026-06-28 | Mentioning a draw to someone you just told is ineligible reads as taunting. Rejection emails get the Instagram footer for brand presence but no promotional draw mention. |
+| 42 | How to share the draw block design between in-pipeline emails and the standalone announcement | Promote `buildDrawBlock`, `buildEmailHtml`, `ctaButton` from file-private to exported so the announcement blast renders the identical card | 2026-06-28 | Single source of truth prevents future drift; matches the lib/ pattern used by cnpj-match.ts, store-signatures.ts, paginate-query.ts. Copy-paste alternatives breed inconsistency. |
+| 43 | Copy volume around the draw card in announcement emails | 1 line of personalized intro + the draw card + 1 line of signoff | 2026-06-28 | The card was specifically designed to communicate everything (date, prize, disclaimer, CTA); adding paragraphs is either redundant or distracting. A save-the-date should read like a save-the-date. |
+| 44 | Audience query timing for the announcement blast | Re-run at send time, NOT cached | 2026-06-28 | Customers whose status changed during the day (queue clearance pushed many to approved between dry-run and real send) need to be correctly classified at the moment they're emailed. A static-snapshot audience would systematically miss late-day approvals. |
+| 45 | Audience deduplication rule for the announcement | A customer with both an approved receipt AND an awaiting_reupload receipt is in the APPROVED segment only | 2026-06-28 | The celebratory variant is more accurate for these customers than the urgent variant. We don't want to make them anxious about an unreadable receipt when they already have codes from another receipt. |
+| 46 | Override-flag verification protocol when smoke-testing customer-facing email scripts | Always check Resend dashboard for recipient ground truth; never trust the script's log line | 2026-06-28 | This session's near-miss: log line printed audience email even when the --to override was respected by the Resend call. Scripts can correctly send while reporting incorrectly. The dashboard is the source of truth. |
 
 ---
 
@@ -334,6 +397,9 @@ The 791 needs_review queue is the queue to clear tomorrow via bucketed manual re
 - **Supabase project paused (April 30).** Caused "Erro ao buscar CPF". Fix: upgraded plan.
 - **awaiting_reupload CHECK constraint missing (May 9).** Production incident: receipts stuck, customers got Email H but no DB update. Fix: ALTER TABLE + verify in Supabase SQL editor before code ships.
 - **June 24 batch processor errors (3 of 269):** 1 unsupported image format (HEIC slipping past resize?), 1 missing participant referential integrity, 1 OpenAI malformed JSON. Investigation queued.
+- **Smoke-test override flag appeared broken (June 28).** Log lines showed real customer addresses as recipients despite the `--to` flag being set. Investigation: log statement printed `p.email` (the audience record) instead of `to` (the actual recipient passed to Resend). Resend dashboard confirmed both sends correctly went to the override address. Behavior is correct; log is cosmetically wrong. Fix queued for post-June 30.
+- **Draw block missing on first smoke test of Part B (June 28).** `DRAW_ANNOUNCEMENT_ACTIVE` env var was missing from `.env.local` — only 2 of the 3 vars had been appended. Fixed by `echo "DRAW_ANNOUNCEMENT_ACTIVE=true" >> .env.local`. Reinforced the verify-on-disk reflex even when the agent reports the change was made.
+- **`source .env.local` produces `command not found` errors (June 28).** Shell treats malformed `.env.local` lines AND the unquoted space in `DRAW_DATE_DISPLAY=30 de junho` (shell reads `de` as a command) as errors. Harmless because `tsx`/dotenv reads `.env.local` directly without going through the shell. No fix needed; documented as expected noise when sourcing.
 
 ---
 
@@ -371,6 +437,7 @@ All tables have RLS enabled. **Storage bucket:** `receipts` (private).
 - Code generation: `floor(amount_in_reais / 50)`
 - Code format: `PXP-2026-XXXXX`
 - Campaign window: April 30, 2026 onward
+- Three env vars added June 28 for the draw announcement system: `DRAW_ANNOUNCEMENT_ACTIVE` (string `'true'`/`'false'`), `DRAW_DATE_DISPLAY` (string e.g. `'30 de junho'`), `DRAW_INSTAGRAM_HANDLE` (string e.g. `'paninixp'`). Set in Vercel Environment Variables (All Environments). After June 30 draw: flip `DRAW_ANNOUNCEMENT_ACTIVE=false` to deactivate all draw blocks without a deploy.
 
 ---
 
@@ -392,6 +459,9 @@ All tables have RLS enabled. **Storage bucket:** `receipts` (private).
 - `OPENAI_API_KEY`
 - `RESEND_API_KEY`
 - `ADMIN_PASSWORD` (currently hardcoded as `panini2026` — flagged for env var migration)
+- `DRAW_ANNOUNCEMENT_ACTIVE` (string `'true'`/`'false'` — feature flag for draw block injection in customer emails)
+- `DRAW_DATE_DISPLAY` (string e.g. `'30 de junho'` — human-readable draw date shown in draw block)
+- `DRAW_INSTAGRAM_HANDLE` (string e.g. `'paninixp'` — Instagram handle shown in draw block CTA)
 
 Values stored in Apple Notes "Panini XP — Project Keys".
 
@@ -399,50 +469,49 @@ Values stored in Apple Notes "Panini XP — Project Keys".
 
 ## 15. Last commit and branch state
 
-- **Last commit:** `87c29ef` — feat(admin): add 'Outros' catch-all bucket (June 25)
-- **Working tree:** clean (handoff update pending commit), all feature commits pushed to `origin/main`
-- **Vercel deploy:** latest commit `87c29ef` deployed to production at `app.paninixp.com.br`
-- **Today's commits, HEAD-first:** `87c29ef`, `e1169cb`, `7d66aec`, `98103c7`, `aeda648`, `2012251`, `74dcce1`, `2fb2cd5`
+- **Last commit:** `839145a` — docs(handoff): June 28 session update (hash fills in after this commit lands)
+- **Working tree:** clean after this commit lands
+- **Vercel deploy:** HEAD at `839145a` (handoff commit hash) deployed to production at `app.paninixp.com.br`
+- **Today's commits, HEAD-first (after handoff commit):** `e4ae800`, `763d7ce`, `1d8ae31`, `db97fa4`, `9fb725c`, `5a8f8d6`, `2a287ec`, `c75365b`
 
 ---
 
-## 16. The exact next step (next session — June 26 morning)
+## 16. The exact next step (next session — June 29 morning)
 
-**Goal:** clear the 791 needs_review queue via bucketed manual review, fast. June 26 is the announcement-email deadline.
+**Goal:** post-blast review + queue maintenance + deferred operational items.
 
 **Recommended order of operations:**
 
-1. **Plain Terminal startup check.** Verify clean tree, latest commit `87c29ef`, live DB counts roughly match the close numbers below (modulo any organic uploads overnight).
-2. **Open** `https://app.paninixp.com.br/admin/recibos-revisao` and log in.
-3. **Process buckets fastest-first:**
-   - **Pronto p/ aprovar** — bulk-approve. Pre-fill is correct in >90% of cases; just glance at the image to confirm the amount and click. Target: ~3 seconds per receipt.
-   - **Verificar valor** — only the amount needs checking. Type the correct amount, click approve.
-   - **Verificar CNPJ** — only the CNPJ needs visual confirmation (is the receipt from DMCAMP or EBANCAS?). If yes, approve; if not, reject as wrong_store.
-   - **EBANCAS** — visual confirmation that the receipt is from EBANCAS. (Auto-approve isn't enabled for EBANCAS — see Decision 36 follow-up below.)
-   - **Sem dados** — hardest bucket. Full image read, no pre-filled data.
-   - **Outros** — full image read, edge cases.
-4. **After manual review is substantially complete**, send the June 26 announcement email blast (existing email template + audience = approved participants).
+1. **Plain Terminal startup check** (see section 3a). Verify clean tree, latest commit matches today's handoff commit, queue counts are roughly stable overnight.
+2. **Open Resend dashboard** and check delivery stats from the June 28 blast: how many of the 1,297 sends were delivered, bounced, opened. Look for any pattern of bounces (a domain-wide block from a specific provider would be worth knowing).
+3. **Process any overnight needs_review receipts** that came in (likely a small number).
+4. **Wrong-store rejections report** (operator asked for this June 28): query all rejections where stored CNPJ does not match DMCAMP or EBANCAS, see which competitor stores show up. First pass: group by stored CNPJ + count. Second pass: image-eyeball the ones with null CNPJ to identify the actual store from the image. Output is a list of unauthorized resellers selling Panini products.
+5. **Build the EBANCAS store-signature matcher** (deferred from June 25) — would auto-approve future EBANCAS receipts; worth doing while the auto-approve gate code is fresh.
+6. **Re-run reprocess on the 34 timeout-error receipts** from June 25. They have no Textract data populated; running reprocess again should resolve most of them.
 
-**If time permits before the email blast:**
-- Re-run reprocess on the 34 timeout-error receipts from the June 25 reprocess (they have no Textract data; they're stuck in needs_review with bucketing-friendly metadata missing).
+**Deferred until after June 30 prize draw:**
 
-**Deferred (out of scope until after June 30 prize draw):**
-
-- EBANCAS store-signature matcher (would auto-approve ~117 receipts; not built today)
-- Admin export flagging no-email approved customers (for WhatsApp follow-up if any win the draw)
+- Flip `DRAW_ANNOUNCEMENT_ACTIVE=false` in Vercel after the June 30 draw
+- Visual duplicate detection (image perceptual hashing on upload) — June 28 surfaced multiple visual-duplicate cases the current dedupe index cannot catch
+- Full-DB audit for code_count vs floor(sum(amount)/50) mismatches (the Takeda-shape error class)
+- Admin export listing approved customers with no email on file (for WhatsApp follow-up)
+- Wrong-store rejections analysis (if not completed in step 4 above)
+- Fix `scripts/send-draw-announcement.ts` log line to print actual recipient
 - API key rotation (now 5 keys including AWS Textract)
-- ADMIN_PASSWORD env var migration (current password `panini2026` is in source — see CLAUDE.md)
-- schema.sql sync (drift on `awaiting_reupload` status, `reupload_request_sent_at`, `manual_review_email_sent_at`, plus today's columns: `amount_on_receipt`, `ai_confidence` enum values)
+- ADMIN_PASSWORD env var migration
+- schema.sql sync (drift on awaiting_reupload, reupload_request_sent_at, manual_review_email_sent_at, amount_on_receipt, ai_confidence enum values)
 - Old @anthropic-ai/sdk package removal
 - uuid@10 deprecation warning
 - Fix `scripts/process-receipts-backlog.ts` switch to print `awaiting_reupload` outcomes
 - Co-Authored-By: Claude trailer in commit `c9e0d56` (May 9) — pact violation, decision pending
 - 3 OpenAI errors from June 24 wave 2 (HEIC, missing participant row, malformed JSON)
-- Loosen Textract strict-CNPJ-format regex (currently strict; spike fix today doesn't address this — see store-signature matcher rule 1 as the de facto fallback)
-- Reject-signal classifier for known non-store vendor names (LOJAS RENNER, Daiso, Outback, HAVAN, etc.) — would auto-reject ~50 receipts currently in needs_review
+- Loosen Textract strict-CNPJ-format regex (currently strict; store-signature matcher is the de facto fallback)
+- Reject-signal classifier for known non-store vendor names (LOJAS RENNER, Daiso, Outback, HAVAN, etc.) — would auto-reject some receipts currently in needs_review
 
 ---
 
 ## 17. Suggested checkpoint
 
 **June 26 morning, before opening the admin review page:** Estimate how many receipts you realistically expect to clear today and by when. If "all 791 by 4pm" feels unrealistic given the day's commitments, commit upfront to the announcement email going out with the queue at, say, 400 — and accept that the remaining 400 customers will get their outcome email in the days following the announcement rather than holding the entire batch hostage to a perfect queue clear.
+
+**June 29 morning, before opening the queue:** Post-blast morning. Open Resend's delivery dashboard first. The 1,297-customer blast had a 0.08% failure rate at send time (1 of 1,297); see what the actual delivery rate looks like and whether any new patterns surfaced overnight (Gmail/Outlook/Yahoo bounces, spam-folder reports via complaints). The Resend dashboard tells you what the smoke test could not.
