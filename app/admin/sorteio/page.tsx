@@ -354,6 +354,13 @@ export default function SorteioPage() {
           </a>
         </div>
 
+        <a
+          href="/admin/sorteio/vencedor"
+          style={{ display: 'block', marginTop: 24, fontSize: 13, color: BRAND.yellow, textDecoration: 'none' }}
+        >
+          Verificar vencedor →
+        </a>
+
       </div>
     </main>
   )
