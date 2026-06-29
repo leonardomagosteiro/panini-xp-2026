@@ -70,7 +70,17 @@ export async function GET(req: NextRequest) {
         { status: 500 }
       )
     }
-    return NextResponse.json({ total: count ?? 0 })
+
+    let draw_phase: string = 'announced'
+    const { data: stateData } = await supabase
+      .from('campaign_state')
+      .select('draw_phase')
+      .eq('id', 1)
+      .single()
+    const phase = (stateData as { draw_phase: string } | null)?.draw_phase
+    if (phase === 'announced' || phase === 'completed') draw_phase = phase
+
+    return NextResponse.json({ total: count ?? 0, draw_phase })
   }
 
   let rows: CodeRow[]
