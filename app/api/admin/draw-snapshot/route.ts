@@ -48,11 +48,29 @@ export async function GET(req: NextRequest) {
   const format = url.searchParams.get('format')
 
   if (
+    format !== 'count' &&
     format !== 'txt' &&
     format !== 'csv' &&
     format !== 'xlsx'
   ) {
     return NextResponse.json({ error: 'Formato invalido' }, { status: 400 })
+  }
+
+  // ── count ─────────────────────────────────────────────────────────────────
+  // COUNT-only query — does not fetch rows; returns total immediately.
+
+  if (format === 'count') {
+    const supabase = createAdminClient()
+    const { count, error } = await supabase
+      .from('codes')
+      .select('*', { count: 'exact', head: true })
+    if (error) {
+      return NextResponse.json(
+        { error: `Erro ao contar codigos: ${error.message}` },
+        { status: 500 }
+      )
+    }
+    return NextResponse.json({ total: count ?? 0 })
   }
 
   let rows: CodeRow[]

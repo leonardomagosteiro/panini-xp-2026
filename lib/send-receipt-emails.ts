@@ -1,5 +1,6 @@
 import { Resend } from 'resend'
 import { logError } from './log-error'
+import { createAdminClient } from './supabase-admin'
 
 const FROM = 'Panini XP <copa2026@paninixp.com.br>'
 const REPLY_TO = 'campinas@paninixp.com.br'
@@ -13,6 +14,30 @@ function formatBrDate(isoOrTimestamp: string): string {
   return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(
     new Date(isoOrTimestamp)
   )
+}
+
+// Reads draw_phase from campaign_state (single row, id=1).
+// Returns 'announced' as safe fallback on any error — the email must never fail because of this read.
+async function getDrawPhase(): Promise<'announced' | 'completed'> {
+  try {
+    const supabase = createAdminClient()
+    const { data, error } = await supabase
+      .from('campaign_state')
+      .select('draw_phase')
+      .eq('id', 1)
+      .single()
+    if (error) {
+      await logError('getDrawPhase', 'Failed to read draw_phase', { error: String(error) })
+      return 'announced'
+    }
+    const phase = (data as { draw_phase: string } | null)?.draw_phase
+    if (phase === 'announced' || phase === 'completed') return phase
+    await logError('getDrawPhase', 'Unexpected draw_phase value', { phase })
+    return 'announced'
+  } catch (err) {
+    await logError('getDrawPhase', 'Unexpected error reading draw_phase', { error: String(err) })
+    return 'announced'
+  }
 }
 
 // CTA button rendered as a table cell for maximum email client compatibility
@@ -72,7 +97,7 @@ export function buildEmailHtml(bodyHtml: string): string {
 
 // Draw announcement block injected into outgoing emails while DRAW_ANNOUNCEMENT_ACTIVE=true.
 // Returns empty strings when the flag is off so callers need no conditional logic.
-export function buildDrawBlock(variant: 'celebratory' | 'urgent' | 'patient'): { text: string; html: string } {
+export function buildDrawBlock(variant: 'celebratory' | 'urgent' | 'patient', phase: 'announced' | 'completed'): { text: string; html: string } {
   if (process.env.DRAW_ANNOUNCEMENT_ACTIVE !== 'true') {
     return { text: '', html: '' }
   }
@@ -81,6 +106,30 @@ export function buildDrawBlock(variant: 'celebratory' | 'urgent' | 'patient'): {
   const handle = process.env.DRAW_INSTAGRAM_HANDLE || 'paninixp'
   const instagramUrl = `https://instagram.com/${handle}`
   const disclaimer = `Prêmio sujeito à disponibilidade na Centauro. Caso indisponível, oferecemos voucher de mesmo valor de compra na Centauro.`
+
+  if (phase === 'completed') {
+    const completedHeadline = `O sorteio de ${date} já aconteceu!`
+    const completedBodyPlain = `Seus códigos continuam valendo para o próximo sorteio, que será anunciado em breve. Fique de olho no nosso Instagram.`
+    const completedBodyHtml = `Seus códigos continuam valendo para o próximo sorteio, que será anunciado em breve. Fique de olho no nosso <a href="${instagramUrl}" style="color:#333333;">Instagram</a>.`
+    const text = `\n${completedHeadline}\n\n${completedBodyPlain}\n\nAcompanhar no Instagram: ${instagramUrl}\n`
+    const html = `<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f5f5f5;border-radius:6px;margin:20px 0;">
+  <tr>
+    <td style="padding:16px 20px;">
+      <p style="font-size:16px;font-weight:bold;color:#111111;margin:0 0 12px 0;">${completedHeadline}</p>
+      <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin:0 0 12px 0;">
+        <tr>
+          <td align="center">
+            <img src="${PRIZE_IMAGE_URL}" alt="Camiseta Oficial da Seleção Brasileira" width="280" style="display:block;max-width:280px;width:100%;height:auto;border:0;border-radius:4px;" />
+          </td>
+        </tr>
+      </table>
+      <p style="font-size:15px;color:#333333;line-height:1.7;margin:0 0 12px 0;">${completedBodyHtml}</p>
+      ${ctaButton('Acompanhar no Instagram', instagramUrl)}
+    </td>
+  </tr>
+</table>`
+    return { text, html }
+  }
 
   let headline: string
   let bodyPlain: string
@@ -135,7 +184,8 @@ export async function sendReceiptApproved(params: {
   const date = formatBrDate(params.uploadDate)
   const n = params.codes.length
   const codeList = params.codes.join('\n')
-  const drawBlock = buildDrawBlock('celebratory')
+  const phase = await getDrawPhase()
+  const drawBlock = buildDrawBlock('celebratory', phase)
   const text = `Olá, ${params.nickname}!
 
 Seu recibo enviado em ${date} foi aprovado! Você ganhou ${n} código(s) para o sorteio da Copa do Mundo 2026:
@@ -467,7 +517,8 @@ export async function sendReceiptPleaseReupload(params: {
   isDelayedAnalysis?: boolean
 }): Promise<void> {
   const prefix = params.isDelayedAnalysis ? 'Recebemos seu recibo há alguns dias e finalizamos a análise agora.\n\n' : ''
-  const drawBlock = buildDrawBlock('urgent')
+  const phase = await getDrawPhase()
+  const drawBlock = buildDrawBlock('urgent', phase)
   const text = `${prefix}Olá, ${params.nickname}!
 
 Recebemos seu recibo, mas a imagem não está clara o suficiente para identificarmos as informações.
@@ -528,7 +579,8 @@ export async function sendReceiptReuploadRequest(params: {
   nickname: string
   uploadDate: string
 }): Promise<void> {
-  const drawBlock = buildDrawBlock('urgent')
+  const phase = await getDrawPhase()
+  const drawBlock = buildDrawBlock('urgent', phase)
   const text = `Olá, ${params.nickname}!
 
 Recebemos seu recibo, mas a imagem não está nítida o suficiente para identificarmos as informações necessárias.
@@ -603,7 +655,8 @@ export async function sendReceiptManualReviewNotification(params: {
   nickname: string
   uploadDate: string
 }): Promise<void> {
-  const drawBlock = buildDrawBlock('patient')
+  const phase = await getDrawPhase()
+  const drawBlock = buildDrawBlock('patient', phase)
   const text = `Olá, ${params.nickname}!
 
 Recebemos seu recibo. Como a imagem precisa de uma análise mais cuidadosa, nosso time vai revisar manualmente em até 48 horas úteis.

@@ -163,7 +163,7 @@ async function queryAwaitingReupload(supabase: ReturnType<typeof createAdminClie
 function buildApprovedEmail(nickname: string, codeCount: number) {
   const subject = `Sorteio em ${DRAW_DATE} — você está concorrendo! | Panini XP`
   const codeLabel = codeCount === 1 ? '1 código' : `${codeCount} códigos`
-  const drawBlock = buildDrawBlock('celebratory')
+  const drawBlock = buildDrawBlock('celebratory', 'announced')
 
   const text = `Olá, ${nickname}!
 
@@ -185,7 +185,7 @@ ${drawBlock.html}
 
 function buildReuploadEmail(nickname: string) {
   const subject = `Reenvie seu recibo antes do sorteio de ${DRAW_DATE} | Panini XP`
-  const drawBlock = buildDrawBlock('urgent')
+  const drawBlock = buildDrawBlock('urgent', 'announced')
 
   const text = `Olá, ${nickname}!
 
