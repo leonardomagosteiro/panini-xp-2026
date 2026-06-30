@@ -1,7 +1,7 @@
 # Panini XP 2026 — Living Project Handoff
 
-**Last updated:** Monday, June 30, 2026, draw day, Brazil time
-**Status:** Live. Full live-draw system shipped end-to-end and deployed: snapshot exports, /admin/sorteio trigger page, draw-phase email switching (new campaign_state table), and winner-verification page. Six commits today (ca8b371..574ad95). Live draw_phase = 'announced' (draw is June 30). campaign_state is a NEW table (schema change, approved by Leonardo).
+**Last updated:** Tuesday, June 30, 2026, draw day (evening), Brazil time
+**Status:** Live. Draw scheduled tonight; team self-operates via runbook. Pre-draw verification passed on production (deploy 29fb1c0 Ready, /admin/sorteio and /admin/sorteio/vencedor load, winner lookup resolves, draw_phase = 'announced'). Evening session: a fraud account was remediated (codes wiped, all receipts rejected, account blocked, its codes burned). Two new schema objects added (approved by Leonardo): participants.blocked column and burned_codes table. HEAD at 29fb1c0.
 
 ---
 
@@ -251,6 +251,25 @@ The 791 needs_review queue is the queue to clear tomorrow via bucketed manual re
 
 ---
 
+### June 30 (evening) — Fraud account remediation + permanent block mechanism
+
+**Context:** Pre-draw, a social-media reminder drove a wave of receipt re-uploads. A duplicate check on two flagged accounts surfaced one account (participant_id b7557cbc-8bbb-4562-b023-bad6ba920600) with a burst of ~28 uploads in a 7-minute window, including receipts dated 2020/2022/2023 (years before the campaign window) and a confirmed structural duplicate (same receipt number + date approved twice, once auto, once manually during the burst). Leonardo identified the account as fraudulent. None of the pre-campaign-dated receipts had been auto-approved — the pipeline held.
+
+**Remediation performed (all targeting only that participant_id):**
+- Full state backed up to a local JSON file before any change (PII; gitignored, never committed).
+- Deleted all 15 codes; set code_count to 0; marked all 33 receipts status=rejected, rejection_reason=fraud. Verified: code_count 0, codes_remaining 0, receipts_rejected 33. Account removed from the draw pool.
+- 15 code strings copied into the new burned_codes table so they can never be reissued.
+
+**Shipped (2 commits, both Ready on Vercel Production):**
+- 94d1e09 — feat(codes): two guards in lib/generate-codes.ts. Blocked-participant guard (returns no codes when participants.blocked is true, before any insert, at the single generation chokepoint). Burned-code guard (generateUniqueCode now rejects any string present in burned_codes, in addition to the codes table). Verified live: blocked user requesting 3 codes returned [] with nothing inserted.
+- 29fb1c0 — feat(emails): introduced a single sendEmail() chokepoint in lib/send-receipt-emails.ts and routed all 9 senders through it. Suppresses email to any blocked participant; fails open (sends + logs if the blocked-status lookup errors, so a transient DB error never swallows a legitimate email). Verified end-to-end with an invalid Resend key (no real sends): blocked user suppressed, non-blocked user passed through to the send attempt.
+
+**Schema changes (approved by Leonardo):** participants.blocked boolean not null default false; new burned_codes table (code text primary key, reason text, burned_at timestamptz default now()) with RLS enabled and no public policy (service-role only), matching the campaign_state pattern.
+
+**Pre-draw production verification (after the fraud commits):** Vercel top deploy 29fb1c0 Ready/Production. /admin/sorteio loads, live count 3.008 (reflects the 15 removed). /admin/sorteio/vencedor loads; lookup of PXP-2026-8TPQO returns VALIDO/Debora; PII toggle defaults hidden and reveals only on deliberate click. The two fraud commits did not disturb draw mechanics.
+
+---
+
 ## 6. Phase 2 commits
 
 | Hash | Date | Subject |
@@ -428,6 +447,9 @@ The 791 needs_review queue is the queue to clear tomorrow via bucketed manual re
 | 50 | Separate /admin/sorteio/vencedor page for winner lookup | Not on the main draw page | 2026-06-29 | The winner panel shows CPF + full name; the main page may be on the live broadcast. Separation reduces accidental exposure |
 | 51 | No reverse button on the draw page | Reversal is a manual SQL command via Leonardo only | 2026-06-29 | A reverse button on a live-broadcast page is a foot-gun; intentional friction is safer. Reversal = UPDATE campaign_state SET draw_phase='announced' |
 | 52 | Winning-code exclusion deferred to next draw | Snapshot script accepts an exclusion list, seeded empty for this draw | 2026-06-29 | The winning code shouldn't re-enter future draws; recorded as a fact + applied at the next snapshot, no machinery built now |
+| 53 | How to neutralize the fraud account before the draw | Delete its codes + zero code_count + reject all its receipts, after a local PII backup | 2026-06-30 | Removes it from the draw pool immediately; backup keeps the action reversible/auditable if the identification is later disputed. Deleting rows (vs marking) required burning the code strings separately — see #55. |
+| 54 | Permanent block mechanism for flagged accounts | participants.blocked boolean, checked at the single code-generation chokepoint and a new single email chokepoint | 2026-06-30 | "Forever" must be enforced in code, not vigilance. One guarded chokepoint per concern (generation, email) means every path — pipeline, manual approval, future scripts — inherits the block automatically. |
+| 55 | Prevent revoked codes from ever being reissued | New burned_codes table; generateUniqueCode rejects any string present in it | 2026-06-30 | Deleting the fraud codes removed them from the codes table, so the unique constraint no longer protected those strings — the generator could theoretically reissue one to a legitimate customer. The burned list is the permanent guard. |
 
 ---
 
@@ -464,7 +486,7 @@ id, source, error_message, error_details (jsonb), created_at
 
 All tables have RLS enabled. **Storage bucket:** `receipts` (private).
 
-**Schema drift note:** schema.sql in repo is known to be out of sync with live DB (missing awaiting_reupload in CHECK, missing reupload_request_sent_at + manual_review_email_sent_at columns). Reconciliation queued.
+**Schema drift note:** schema.sql in repo is known to be out of sync with live DB (missing awaiting_reupload in CHECK, missing reupload_request_sent_at + manual_review_email_sent_at columns). Reconciliation queued. Also not in schema.sql: campaign_state table (June 29), participants.blocked column (June 30 evening), burned_codes table (June 30 evening). Reconciliation still queued.
 
 ---
 
