@@ -1,6 +1,6 @@
 # Panini XP 2026 — Living Project Handoff
 
-**Last updated:** Monday, June 29, 2026, end of day Brazil time
+**Last updated:** Monday, June 30, 2026, draw day, Brazil time
 **Status:** Live. Full live-draw system shipped end-to-end and deployed: snapshot exports, /admin/sorteio trigger page, draw-phase email switching (new campaign_state table), and winner-verification page. Six commits today (ca8b371..574ad95). Live draw_phase = 'announced' (draw is June 30). campaign_state is a NEW table (schema change, approved by Leonardo).
 
 ---
@@ -232,6 +232,22 @@ The 791 needs_review queue is the queue to clear tomorrow via bucketed manual re
 **Deliverable:** one-page Portuguese team runbook (PDF, generated in chat — NOT in repo). Covers off-camera login, export-then-trigger order, the never-show-the-red-zone rule, winner lookup, and "avise o Leonardo" for reversal.
 
 **Process notes:** Recurring snag — dev-server and verification commands kept landing in the same terminal tab, killing the server (ERR_CONNECTION_REFUSED); fix is a dedicated server tab that nothing else is typed into. Accidental Confirmac on the trigger during testing flipped live draw_phase to 'completed' — reset to 'announced' within minutes, no customer impact; it doubled as a full end-to-end proof of the trigger. campaign_state state persists across server restarts (it's in the DB), which is correct behavior.
+
+### June 30 — Draw day: PII toggle shipped, Option C rehearsal, draw-mechanics verified against code
+
+**Context:** Draw day (live tonight on Instagram @paninixp). Operational support + one shipped feature, not a build day. Team self-operates via Option B (rehearse all except Confirmar).
+
+**Verified the draw mechanics against the actual handler code (not handoff prose):**
+- Read app/api/admin/draw-start/route.ts directly. Confirmed "Comecar sorteio" does ONE thing: UPDATE campaign_state SET draw_phase='completed'. It does NOT snapshot and does NOT read the codes table. The exported TXT is the freeze; the button is only the start signal. Runbook order confirmed correct: export first, then click.
+- Read app/api/admin/draw-winner/route.ts directly. Confirmed pure-read: four .select() calls plus a signed-URL generation, zero writes. Validity is computed live as receipt.status === 'approved', never persisted. No winners table. Marking a winner during testing changes no rows.
+
+**Option C rehearsal performed (controlled production, immediate reset):** Ran the full flow on production for the team — login, export, confirm modal — then clicked Confirmar (flipping draw_phase to 'completed') and immediately fired a pre-loaded reset SQL. Window held to seconds. Verified draw_phase back to 'announced' at 12:28:38. Undo was pre-loaded in a parked Supabase tab before the trigger was clicked.
+
+**Shipped — winner-page PII toggle (commit b059931):** The red DADOS INTERNOS zone (full name, CPF, receipt fields, image) now starts HIDDEN by default, revealed only by a deliberate "Mostrar dados internos" click, and re-hides automatically on every new lookup. Motivation: the team screen-shares the full desktop during the live draw, so "don't scroll to it" was not a sufficient guard. One file changed (app/admin/sorteio/vencedor/page.tsx), +21 lines. Tested locally on all four behaviors, then verified live on production. No API or schema change.
+
+**Test-residue check:** The winning code used in testing, PXP-2026-SNJI2 (participant: Karina), confirmed via DB query to be a real, approved, draw-eligible code, untouched by testing because the winner page only reads. The only field today's testing wrote was draw_phase, now verified 'announced'.
+
+**Draw-day close state:** draw_phase='announced' (verified, 12:28:38). PII toggle live in production. Runbook shipped to team (PDF, in chat, not in repo). Password handoff via separate channel. Sandbox decision: went with Option B plus the Option C rehearsal above; no separate sandbox built.
 
 ---
 
@@ -497,10 +513,10 @@ Values stored in Apple Notes "Panini XP — Project Keys".
 
 ## 15. Last commit and branch state
 
-- **Last commit:** `839145a` — docs(handoff): June 28 session update (hash fills in after this commit lands)
-- **Working tree:** clean after this commit lands
-- **Vercel deploy:** HEAD at `839145a` (handoff commit hash) deployed to production at `app.paninixp.com.br`
-- **Today's commits, HEAD-first (after handoff commit):** `e4ae800`, `763d7ce`, `1d8ae31`, `db97fa4`, `9fb725c`, `5a8f8d6`, `2a287ec`, `c75365b`
+- **Last commit:** b059931 — feat(admin): hide winner internal-data zone by default behind a toggle
+- **Working tree:** clean (after this handoff commit lands)
+- **Vercel deploy:** b059931 deployed and verified live at app.paninixp.com.br/admin/sorteio/vencedor
+- **Prior HEAD before today:** 9866cc6 (June 29 handoff commit)
 
 ---
 
@@ -512,7 +528,7 @@ Values stored in Apple Notes "Panini XP — Project Keys".
 
 **For Leonardo:** send the team the runbook + rehearsal message (Option B: practice everything EXCEPT Confirmar) + the password (separate channel). DECIDE next morning: build an isolated sandbox (separate Supabase + Vercel, ~2-3h) for a full hands-on team rehearsal, OR rely on Option B + Option C (controlled production rehearsal with immediate reset). Leaning Option B.
 
-**After the June 30 draw:** flip DRAW_ANNOUNCEMENT_ACTIVE=false in Vercel AND confirm draw_phase='completed' (the button will have set it); record the winning code for next-draw exclusion.
+**After the June 30 draw:** flip DRAW_ANNOUNCEMENT_ACTIVE=false in Vercel, confirm draw_phase='completed' (the button sets it), and record the winning code for next-draw exclusion. The PII toggle (b059931) and the rehearsal decision (Option B + Option C) are now DONE.
 
 **Still deferred (post-June-30):** PROJECT_HANDOFF schema.sql sync (now also add campaign_state), API key rotation, ADMIN_PASSWORD env migration, send-draw-announcement.ts log-line fix, visual duplicate detection, code_count audit, no-email export. Plus: build the EBANCAS store-signature matcher, reprocess the 34 June-25 timeout receipts (still pending from before this session).
 
