@@ -33,6 +33,7 @@ export default function VencedorPage() {
   const [lookupLoading, setLookupLoading] = useState(false)
   const [lookupError, setLookupError] = useState('')
   const [result, setResult] = useState<WinnerResult | null>(null)
+  const [showInternal, setShowInternal] = useState(false)
 
   async function checkAuth() {
     try {
@@ -87,6 +88,7 @@ export default function VencedorPage() {
     setLookupLoading(true)
     setLookupError('')
     setResult(null)
+    setShowInternal(false)
 
     try {
       const res = await fetch(`/api/admin/draw-winner?code=${encodeURIComponent(code)}`)
@@ -293,6 +295,24 @@ export default function VencedorPage() {
                 </div>
 
                 {/* ZONE 2 — internal data, must not be shown on air */}
+                <button
+                  onClick={() => setShowInternal(v => !v)}
+                  style={{
+                    width: '100%',
+                    marginBottom: 20,
+                    padding: '12px 0',
+                    borderRadius: 8,
+                    border: '1px solid #8a2020',
+                    backgroundColor: 'transparent',
+                    color: '#cf4444',
+                    fontSize: 14,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {showInternal ? 'Esconder dados internos' : 'Mostrar dados internos'}
+                </button>
+                {showInternal && (
                 <div style={{
                   backgroundColor: '#1e0a0a',
                   border: '2px solid #8a2020',
@@ -360,6 +380,7 @@ export default function VencedorPage() {
                     </div>
                   </div>
                 </div>
+                )}
               </>
             )}
           </>
