@@ -1,7 +1,7 @@
 # Panini XP 2026 — Living Project Handoff
 
-**Last updated:** Sunday, June 28, 2026, end of day Brazil time
-**Status:** Live. Queue cleared (0 needs_review). Part B (draw announcement pipeline mods) shipped to production. Part A (announcement blast) delivered to 1,297 customers. Eight feature/fix commits shipped today, plus this handoff commit.
+**Last updated:** Monday, June 29, 2026, end of day Brazil time
+**Status:** Live. Full live-draw system shipped end-to-end and deployed: snapshot exports, /admin/sorteio trigger page, draw-phase email switching (new campaign_state table), and winner-verification page. Six commits today (ca8b371..574ad95). Live draw_phase = 'announced' (draw is June 30). campaign_state is a NEW table (schema change, approved by Leonardo).
 
 ---
 
@@ -213,6 +213,28 @@ The 791 needs_review queue is the queue to clear tomorrow via bucketed manual re
 
 ---
 
+### June 29 — Live-draw system built end-to-end
+
+**Context:** Full-day build session. Goal: give the team a way to run the June 30 prize draw live on Instagram, provably legit, without touching production data destructively.
+
+**Shipped (6 commits past c2fe920):**
+- ca8b371 — read-only snapshot script scripts/generate-draw-snapshot.ts (txt/csv/xlsx/pdf to ./draw-exports/, gitignored). Adds pdfkit + xlsx deps.
+- c5818e2 — snapshot API route GET /api/admin/draw-snapshot (txt/csv/xlsx; pdf dropped due to serverless pdfkit font-bundling — local script covers pdf). Auth-gated, inline-paginated, in-memory streaming (no disk writes), binary returned as Uint8Array.
+- cb1ae4f — /admin/sorteio page (live count + export buttons) + draw-phase email switching. Emails read draw_phase via new getDrawPhase() helper (safe fallback 'announced' on any DB error). buildDrawBlock(variant, phase): 'announced' = pre-draw block (unchanged), 'completed' = post-draw "codes still valid, next draw coming" message. Wired into the 4 customer-facing emails; 5 rejection emails untouched; send-draw-announcement.ts pinned to 'announced'.
+- 2b9e8cd — "Começar sorteio" trigger + POST /api/admin/draw-start (flips draw_phase to 'completed'). Neutral broadcast-safe confirm modal (no email/internal wording); page reads phase on load so a refresh shows the true state; button hidden after start so it can't double-fire.
+- e934634 — winner verification: GET /api/admin/draw-winner + /admin/sorteio/vencedor page. Code input normalized (uppercase, strip non-alphanumerics, rebuild canonical PXP-2026-XXXXX) so missing dashes / spaces / lowercase all match. Two-zone UI: public "Resultado" (code, VALIDO/INVALIDO, nickname) + red "DADOS INTERNOS — NAO EXIBIR AO VIVO" block (full name, CPF, receipt fields, signed-URL image) — broadcast privacy guard.
+- 574ad95 — subtle yellow "Verificar vencedor" link on /admin/sorteio (one-click nav to the winner page).
+
+**Schema change (approved by Leonardo):** new table campaign_state — single row (id=1, enforced by a check constraint), draw_phase text check IN ('announced','completed'), updated_at, RLS enabled with NO public policy (service-role only). Seeded 'announced'. Backup confirmed (Supabase auto-backup 9h old) and DB health "Healthy" before creating. CURRENTLY 'announced' — draw is June 30.
+
+**Verified:** snapshot exports correct at 2,998 then 3,002 codes (live count grew during the day as customers uploaded); email phase switching tested in BOTH states against the Resend dashboard (announced -> pre-draw block, completed -> post-draw block, then reset to announced); winner lookup against a real approved code (Debora, PXP-2026-8TPQO) and malformed/no-dash inputs; all pages deployed to production and tested on app.paninixp.com.br, not just localhost.
+
+**Deliverable:** one-page Portuguese team runbook (PDF, generated in chat — NOT in repo). Covers off-camera login, export-then-trigger order, the never-show-the-red-zone rule, winner lookup, and "avise o Leonardo" for reversal.
+
+**Process notes:** Recurring snag — dev-server and verification commands kept landing in the same terminal tab, killing the server (ERR_CONNECTION_REFUSED); fix is a dedicated server tab that nothing else is typed into. Accidental Confirmac on the trigger during testing flipped live draw_phase to 'completed' — reset to 'announced' within minutes, no customer impact; it doubled as a full end-to-end proof of the trigger. campaign_state state persists across server restarts (it's in the DB), which is correct behavior.
+
+---
+
 ## 6. Phase 2 commits
 
 | Hash | Date | Subject |
@@ -384,6 +406,12 @@ The 791 needs_review queue is the queue to clear tomorrow via bucketed manual re
 | 44 | Audience query timing for the announcement blast | Re-run at send time, NOT cached | 2026-06-28 | Customers whose status changed during the day (queue clearance pushed many to approved between dry-run and real send) need to be correctly classified at the moment they're emailed. A static-snapshot audience would systematically miss late-day approvals. |
 | 45 | Audience deduplication rule for the announcement | A customer with both an approved receipt AND an awaiting_reupload receipt is in the APPROVED segment only | 2026-06-28 | The celebratory variant is more accurate for these customers than the urgent variant. We don't want to make them anxious about an unreadable receipt when they already have codes from another receipt. |
 | 46 | Override-flag verification protocol when smoke-testing customer-facing email scripts | Always check Resend dashboard for recipient ground truth; never trust the script's log line | 2026-06-28 | This session's near-miss: log line printed audience email even when the --to override was respected by the Resend call. Scripts can correctly send while reporting incorrectly. The dashboard is the source of truth. |
+| 47 | Snapshot-as-freeze instead of a destructive lock | The team clicks "Começar sorteio"; the exported file IS the freeze | 2026-06-29 | Read-only, no schema mutation, timestamped file is itself the legitimacy proof; uploads keep flowing into the NEXT draw |
+| 48 | draw_phase stored in DB (campaign_state), not an env var | New single-row table read by the email pipeline | 2026-06-29 | Post-draw email phase must persist indefinitely until the NEXT draw is announced; an env var/browser state can't do that and a button can't flip a Vercel env var |
+| 49 | The "Começar sorteio" button flips draw_phase to 'completed' | One action does both: marks the draw moment AND switches the emails | 2026-06-29 | Fixes the case where a customer uploading right after the draw would otherwise get a "draw is coming" email about a draw that already happened |
+| 50 | Separate /admin/sorteio/vencedor page for winner lookup | Not on the main draw page | 2026-06-29 | The winner panel shows CPF + full name; the main page may be on the live broadcast. Separation reduces accidental exposure |
+| 51 | No reverse button on the draw page | Reversal is a manual SQL command via Leonardo only | 2026-06-29 | A reverse button on a live-broadcast page is a foot-gun; intentional friction is safer. Reversal = UPDATE campaign_state SET draw_phase='announced' |
+| 52 | Winning-code exclusion deferred to next draw | Snapshot script accepts an exclusion list, seeded empty for this draw | 2026-06-29 | The winning code shouldn't re-enter future draws; recorded as a fact + applied at the next snapshot, no machinery built now |
 
 ---
 
@@ -476,37 +504,17 @@ Values stored in Apple Notes "Panini XP — Project Keys".
 
 ---
 
-## 16. The exact next step (next session — June 29 morning)
+## 16. The exact next step (next session — June 30 morning)
 
-**Goal:** post-blast review + queue maintenance + deferred operational items.
+**Goal (June 30, draw day):** support the live draw; afterward, transition the campaign to post-draw state.
 
-**Recommended order of operations:**
+**For the team (draw day, self-service):** 1) log in to /admin/sorteio OFF-CAMERA before going live; 2) export the TXT first; 3) Começar sorteio → Confirmar to start (this flips draw_phase to 'completed' and switches emails); 4) run the draw in the external tool; 5) verify the winner on /admin/sorteio/vencedor (never show the red DADOS INTERNOS zone on stream). Team records the winning code themselves.
 
-1. **Plain Terminal startup check** (see section 3a). Verify clean tree, latest commit matches today's handoff commit, queue counts are roughly stable overnight.
-2. **Open Resend dashboard** and check delivery stats from the June 28 blast: how many of the 1,297 sends were delivered, bounced, opened. Look for any pattern of bounces (a domain-wide block from a specific provider would be worth knowing).
-3. **Process any overnight needs_review receipts** that came in (likely a small number).
-4. **Wrong-store rejections report** (operator asked for this June 28): query all rejections where stored CNPJ does not match DMCAMP or EBANCAS, see which competitor stores show up. First pass: group by stored CNPJ + count. Second pass: image-eyeball the ones with null CNPJ to identify the actual store from the image. Output is a list of unauthorized resellers selling Panini products.
-5. **Build the EBANCAS store-signature matcher** (deferred from June 25) — would auto-approve future EBANCAS receipts; worth doing while the auto-approve gate code is fresh.
-6. **Re-run reprocess on the 34 timeout-error receipts** from June 25. They have no Textract data populated; running reprocess again should resolve most of them.
+**For Leonardo:** send the team the runbook + rehearsal message (Option B: practice everything EXCEPT Confirmar) + the password (separate channel). DECIDE next morning: build an isolated sandbox (separate Supabase + Vercel, ~2-3h) for a full hands-on team rehearsal, OR rely on Option B + Option C (controlled production rehearsal with immediate reset). Leaning Option B.
 
-**Deferred until after June 30 prize draw:**
+**After the June 30 draw:** flip DRAW_ANNOUNCEMENT_ACTIVE=false in Vercel AND confirm draw_phase='completed' (the button will have set it); record the winning code for next-draw exclusion.
 
-- Flip `DRAW_ANNOUNCEMENT_ACTIVE=false` in Vercel after the June 30 draw
-- Visual duplicate detection (image perceptual hashing on upload) — June 28 surfaced multiple visual-duplicate cases the current dedupe index cannot catch
-- Full-DB audit for code_count vs floor(sum(amount)/50) mismatches (the Takeda-shape error class)
-- Admin export listing approved customers with no email on file (for WhatsApp follow-up)
-- Wrong-store rejections analysis (if not completed in step 4 above)
-- Fix `scripts/send-draw-announcement.ts` log line to print actual recipient
-- API key rotation (now 5 keys including AWS Textract)
-- ADMIN_PASSWORD env var migration
-- schema.sql sync (drift on awaiting_reupload, reupload_request_sent_at, manual_review_email_sent_at, amount_on_receipt, ai_confidence enum values)
-- Old @anthropic-ai/sdk package removal
-- uuid@10 deprecation warning
-- Fix `scripts/process-receipts-backlog.ts` switch to print `awaiting_reupload` outcomes
-- Co-Authored-By: Claude trailer in commit `c9e0d56` (May 9) — pact violation, decision pending
-- 3 OpenAI errors from June 24 wave 2 (HEIC, missing participant row, malformed JSON)
-- Loosen Textract strict-CNPJ-format regex (currently strict; store-signature matcher is the de facto fallback)
-- Reject-signal classifier for known non-store vendor names (LOJAS RENNER, Daiso, Outback, HAVAN, etc.) — would auto-reject some receipts currently in needs_review
+**Still deferred (post-June-30):** PROJECT_HANDOFF schema.sql sync (now also add campaign_state), API key rotation, ADMIN_PASSWORD env migration, send-draw-announcement.ts log-line fix, visual duplicate detection, code_count audit, no-email export. Plus: build the EBANCAS store-signature matcher, reprocess the 34 June-25 timeout receipts (still pending from before this session).
 
 ---
 
