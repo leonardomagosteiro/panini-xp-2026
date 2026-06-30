@@ -27,7 +27,17 @@ async function generateUniqueCode(supabase: SupabaseClient): Promise<string> {
       throw new Error(`Code uniqueness check failed: ${error.message}`)
     }
 
-    if (data.length === 0) {
+    const { data: burned, error: burnedError } = await supabase
+      .from('burned_codes')
+      .select('code')
+      .eq('code', code)
+      .limit(1)
+
+    if (burnedError) {
+      throw new Error(`Burned-code check failed: ${burnedError.message}`)
+    }
+
+    if (data.length === 0 && burned.length === 0) {
       return code
     }
   }
@@ -44,6 +54,23 @@ export async function generateCodesForReceipt(
   supabase: SupabaseClient
 ): Promise<string[]> {
   if (count === 0) return []
+
+  // Guard: never generate codes for a blocked participant
+  const { data: participant, error: blockedError } = await supabase
+    .from('participants')
+    .select('blocked')
+    .eq('id', participantId)
+    .single()
+
+  if (blockedError || participant === null) {
+    throw new Error(
+      `Blocked-status check failed: ${blockedError?.message ?? 'participant not found'}`
+    )
+  }
+
+  if (participant.blocked === true) {
+    return []
+  }
 
   // Phase 1: generate all N unique codes sequentially
   // (sequential is required — parallel checks could confirm the same code as unique twice)

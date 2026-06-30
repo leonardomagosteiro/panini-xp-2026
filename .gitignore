@@ -38,3 +38,10 @@ predict-backlog-results.json
 reprocess-backlog-results.json
 reprocess-cnpj-null-results.json
 draw-exports/
+
+# Local scratch scripts and PII backups (never commit)
+sign-*.mjs
+backup-*.mjs
+burn-*.mjs
+test-guards.mjs
+backup-*-fraud-*.json
