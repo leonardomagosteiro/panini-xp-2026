@@ -45,3 +45,5 @@ backup-*.mjs
 burn-*.mjs
 test-guards.mjs
 backup-*-fraud-*.json
+check-*.mjs
+test-*.mjs

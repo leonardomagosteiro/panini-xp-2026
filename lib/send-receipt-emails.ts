@@ -172,6 +172,46 @@ export function buildDrawBlock(variant: 'celebratory' | 'urgent' | 'patient', ph
   return { text, html }
 }
 
+// Single send chokepoint. Suppresses all email to a blocked participant.
+// Fails open: if the blocked-status lookup errors, the email is sent anyway and the error logged,
+// so a transient DB error never silently swallows a legitimate customer email.
+async function sendEmail(
+  participantId: string,
+  payload: { to: string; subject: string; text: string; html: string }
+): Promise<void> {
+  try {
+    const supabase = createAdminClient()
+    const { data, error } = await supabase
+      .from('participants')
+      .select('blocked')
+      .eq('id', participantId)
+      .single()
+    if (!error && data?.blocked === true) {
+      await logError('send-receipt-emails', 'Suppressed email to blocked participant', {
+        participant_id: participantId,
+        to: payload.to,
+        subject: payload.subject,
+      })
+      return
+    }
+  } catch (err) {
+    await logError('send-receipt-emails', 'Blocked-status check failed; sending anyway', {
+      participant_id: participantId,
+      error: String(err),
+    })
+  }
+
+  const resend = new Resend(process.env.RESEND_API_KEY)
+  await resend.emails.send({
+    from: FROM,
+    replyTo: REPLY_TO,
+    to: payload.to,
+    subject: payload.subject,
+    text: payload.text,
+    html: payload.html,
+  })
+}
+
 // Email A — Approved with codes
 export async function sendReceiptApproved(params: {
   participantId: string
@@ -218,10 +258,7 @@ ${drawBlock.html}
 <p>Boa sorte!</p>`
 
   try {
-    const resend = new Resend(process.env.RESEND_API_KEY)
-    await resend.emails.send({
-      from: FROM,
-      replyTo: REPLY_TO,
+    await sendEmail(params.participantId, {
       to: params.email,
       subject: 'Seus códigos chegaram — Panini XP',
       text,
@@ -288,10 +325,7 @@ ${prefixHtml}
 ${ctaButton('Enviar novo recibo', REUPLOAD_URL)}`
 
   try {
-    const resend = new Resend(process.env.RESEND_API_KEY)
-    await resend.emails.send({
-      from: FROM,
-      replyTo: REPLY_TO,
+    await sendEmail(params.participantId, {
       to: params.email,
       subject: 'Não conseguimos processar seu envio — Panini XP',
       text,
@@ -339,10 +373,7 @@ ${prefixHtml}
 ${ctaButton('Enviar novo recibo', REUPLOAD_URL)}`
 
   try {
-    const resend = new Resend(process.env.RESEND_API_KEY)
-    await resend.emails.send({
-      from: FROM,
-      replyTo: REPLY_TO,
+    await sendEmail(params.participantId, {
       to: params.email,
       subject: 'Recibo não elegível — Panini XP',
       text,
@@ -391,10 +422,7 @@ ${prefixHtml}
 ${ctaButton('Enviar novo recibo', REUPLOAD_URL)}`
 
   try {
-    const resend = new Resend(process.env.RESEND_API_KEY)
-    await resend.emails.send({
-      from: FROM,
-      replyTo: REPLY_TO,
+    await sendEmail(params.participantId, {
       to: params.email,
       subject: 'Recibo recebido, mas abaixo do valor mínimo — Panini XP',
       text,
@@ -442,10 +470,7 @@ ${prefixHtml}
 ${ctaButton('Enviar novo recibo', REUPLOAD_URL)}`
 
   try {
-    const resend = new Resend(process.env.RESEND_API_KEY)
-    await resend.emails.send({
-      from: FROM,
-      replyTo: REPLY_TO,
+    await sendEmail(params.participantId, {
       to: params.email,
       subject: 'Recibo fora do período da campanha — Panini XP',
       text,
@@ -490,10 +515,7 @@ ${prefixHtml}
 ${ctaButton('Enviar novo recibo', REUPLOAD_URL)}`
 
   try {
-    const resend = new Resend(process.env.RESEND_API_KEY)
-    await resend.emails.send({
-      from: FROM,
-      replyTo: REPLY_TO,
+    await sendEmail(params.participantId, {
       to: params.email,
       subject: 'Recibo já registrado — Panini XP',
       text,
@@ -554,10 +576,7 @@ ${ctaButton('Enviar nova foto', REUPLOAD_URL)}
 ${drawBlock.html}`
 
   try {
-    const resend = new Resend(process.env.RESEND_API_KEY)
-    await resend.emails.send({
-      from: FROM,
-      replyTo: REPLY_TO,
+    await sendEmail(params.participantId, {
       to: params.email,
       subject: 'Não conseguimos ler seu recibo — Panini XP',
       text,
@@ -630,10 +649,7 @@ ${ctaButton('Enviar nova foto', REUPLOAD_URL)}
 ${drawBlock.html}`
 
   try {
-    const resend = new Resend(process.env.RESEND_API_KEY)
-    await resend.emails.send({
-      from: FROM,
-      replyTo: REPLY_TO,
+    await sendEmail(params.participantId, {
       to: params.email,
       subject: 'Precisamos de uma foto melhor — Panini XP',
       text,
@@ -675,10 +691,7 @@ Equipe Panini XP`
 ${drawBlock.html}`
 
   try {
-    const resend = new Resend(process.env.RESEND_API_KEY)
-    await resend.emails.send({
-      from: FROM,
-      replyTo: REPLY_TO,
+    await sendEmail(params.participantId, {
       to: params.email,
       subject: 'Estamos analisando seu recibo — Panini XP',
       text,
