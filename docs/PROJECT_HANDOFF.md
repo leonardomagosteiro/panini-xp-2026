@@ -1,7 +1,7 @@
 # Panini XP 2026 — Living Project Handoff
 
-**Last updated:** Tuesday, June 30, 2026, draw day (evening), Brazil time
-**Status:** Live. Draw scheduled tonight; team self-operates via runbook. Pre-draw verification passed on production (deploy 29fb1c0 Ready, /admin/sorteio and /admin/sorteio/vencedor load, winner lookup resolves, draw_phase = 'announced'). Evening session: a fraud account was remediated (codes wiped, all receipts rejected, account blocked, its codes burned). Two new schema objects added (approved by Leonardo): participants.blocked column and burned_codes table. HEAD at 29fb1c0.
+**Last updated:** Wednesday, July 1, 2026, Brazil time
+**Status:** Post-draw. The June 30 draw executed live on Instagram ~21:36 BRT; draw_phase flipped to 'completed' cleanly. Winner: code PXP-2026-UF3EV -> Rodrigo (verified legit — not blocked, receipt approved, not burned). Winner notified by email July 1 (deadline to reply: July 6 2026, 23h59, or a re-draw is held). Post-draw cleanup done: DRAW_ANNOUNCEMENT_ACTIVE flipped to false and redeployed (rebuild of 8af579e); schema.sql reconciled with live DB (16e620c). Winner-notification script shipped (93866be). HEAD at 93866be.
 
 ---
 
@@ -251,6 +251,23 @@ The 791 needs_review queue is the queue to clear tomorrow via bucketed manual re
 
 ---
 
+### July 1 — Post-draw cleanup, schema reconciliation, winner notification
+
+**Context:** First post-draw session. The June 30 draw ran live on Instagram the night before. Goal: verify post-draw state, run the cleanup checklist, then reach the winner.
+
+**Draw outcome (verified, not assumed):** draw_phase read as 'completed' in campaign_state, updated_at 2026-07-01 00:36:18 UTC (21:36 BRT) — a clean flip during the live window. Winning code PXP-2026-UF3EV resolves to participant Rodrigo (full_name JEFERSON RODRIGO GERALDO). Validity confirmed by SQL: blocked=false, receipt_status=approved, is_burned=0. Contact on file: whatsapp (19) 99301-3498, email rgeraldo813@gmail.com.
+
+**Post-draw cleanup checklist (all three verified):**
+1. draw_phase = 'completed' — confirmed via Supabase SQL read of campaign_state.
+2. DRAW_ANNOUNCEMENT_ACTIVE — was still 'true' in Vercel; flipped to 'false' (All Environments) and redeployed (rebuild of HEAD 8af579e, Ready on Production). Note: env-var change required a redeploy to take effect — Vercel bakes the value into the running deployment, so "no deploy needed" was wrong; the redeploy is the step that makes it live.
+3. Winning code PXP-2026-UF3EV recorded for next-draw exclusion (see Section 13 / decision #52).
+
+**Shipped:**
+- 16e620c — docs(schema): reconciled schema.sql with the live DB. Added participants.blocked; added awaiting_reupload to the receipts.status CHECK; added receipts.reupload_request_sent_at and manual_review_email_sent_at; added the campaign_state and burned_codes tables (both RLS-enabled, no policy, service-role only). Every value verified against the live DB via information_schema + pg_constraint + pg_policy queries before editing — NOT from handoff prose (which was wrong on two column names; see the Section 11 correction).
+- 93866be — feat(scripts): scripts/send-winner-email.ts, a one-off winner-notification email sent via the Resend API. Takes a required --to flag (no hardcoded recipient), sends branded HTML + plain-text with the prize image, jersey-size question, July 6 deadline, and re-draw clause. Dry-run tested to Leonardo's own inbox twice before the live send. Reusable if the July 6 deadline triggers a re-draw.
+
+**Winner notification sent:** live send to rgeraldo813@gmail.com confirmed Delivered on the Resend dashboard (id 8581b893-c455-431c-95ec-522ad58cb0d4). Email asks for jersey size (P/M/G/GG/XG) and sets a July 6 2026 23h59 reply deadline; if no reply by then, a new draw will be held. Reply channels: diretoria@paninixp.com.br and Instagram @paninixp.
+
 ### June 30 (evening) — Fraud account remediation + permanent block mechanism
 
 **Context:** Pre-draw, a social-media reminder drove a wave of receipt re-uploads. A duplicate check on two flagged accounts surfaced one account (participant_id b7557cbc-8bbb-4562-b023-bad6ba920600) with a burst of ~28 uploads in a 7-minute window, including receipts dated 2020/2022/2023 (years before the campaign window) and a confirmed structural duplicate (same receipt number + date approved twice, once auto, once manually during the burst). Leonardo identified the account as fraudulent. None of the pre-campaign-dated receipts had been auto-approved — the pipeline held.
@@ -475,7 +492,7 @@ The 791 needs_review queue is the queue to clear tomorrow via bucketed manual re
 id, nickname, full_name, cpf, whatsapp, email (mandatory), amount_spent, code_count, store_origin, lgpd_consent, created_at
 
 **Table: `receipts`** — uploaded receipt records
-id, participant_id (FK), cpf, image_path, status (uploaded | processing | approved | rejected | needs_review | awaiting_reupload), receipt_number, receipt_date, ai_processed_at, ai_confidence, ai_raw_response (jsonb), reviewed_at, reviewed_by, rejection_reason, cnpj_on_receipt, amount_total_brl, reupload_request_sent_at, manual_review_email_sent_at.
+id, participant_id (FK), cpf, storage_path, status (uploaded | processing | approved | rejected | needs_review | awaiting_reupload), receipt_number, receipt_date, ai_processed_at, ai_confidence, ai_raw_response (jsonb), reviewed_at, reviewed_by, rejection_reason, cnpj_on_receipt, amount_on_receipt, reupload_request_sent_at, manual_review_email_sent_at. (Corrected July 1: the real column names are storage_path and amount_on_receipt, verified against the live DB — earlier prose listed image_path and amount_total_brl, which do not exist.)
 Dedupe index on (receipt_number, receipt_date, cnpj_on_receipt).
 
 **Table: `codes`** — generated sweepstakes codes
@@ -486,7 +503,7 @@ id, source, error_message, error_details (jsonb), created_at
 
 All tables have RLS enabled. **Storage bucket:** `receipts` (private).
 
-**Schema drift note:** schema.sql in repo is known to be out of sync with live DB (missing awaiting_reupload in CHECK, missing reupload_request_sent_at + manual_review_email_sent_at columns). Reconciliation queued. Also not in schema.sql: campaign_state table (June 29), participants.blocked column (June 30 evening), burned_codes table (June 30 evening). Reconciliation still queued.
+**Schema drift note:** RECONCILED July 1 (commit 16e620c). schema.sql now matches the live DB — awaiting_reupload in the receipts.status CHECK, the reupload_request_sent_at + manual_review_email_sent_at columns, participants.blocked, and the campaign_state + burned_codes tables are all documented. Verified against information_schema/pg_constraint/pg_policy before editing.
 
 ---
 
@@ -503,6 +520,7 @@ All tables have RLS enabled. **Storage bucket:** `receipts` (private).
 - Code generation: `floor(amount_in_reais / 50)`
 - Code format: `PXP-2026-XXXXX`
 - Campaign window: April 30, 2026 onward
+- Winning code (June 30 draw): PXP-2026-UF3EV (winner Rodrigo). MUST be added to the snapshot exclusion list at the next draw (decision #52). Currently the exclusion list is seeded empty.
 - Three env vars added June 28 for the draw announcement system: `DRAW_ANNOUNCEMENT_ACTIVE` (string `'true'`/`'false'`), `DRAW_DATE_DISPLAY` (string e.g. `'30 de junho'`), `DRAW_INSTAGRAM_HANDLE` (string e.g. `'paninixp'`). Set in Vercel Environment Variables (All Environments). After June 30 draw: flip `DRAW_ANNOUNCEMENT_ACTIVE=false` to deactivate all draw blocks without a deploy.
 
 ---
@@ -542,17 +560,13 @@ Values stored in Apple Notes "Panini XP — Project Keys".
 
 ---
 
-## 16. The exact next step (next session — June 30 morning)
+## 16. The exact next step (next session — July 2 onward)
 
-**Goal (June 30, draw day):** support the live draw; afterward, transition the campaign to post-draw state.
+**Immediate watch item — the winner deadline.** The winner (Rodrigo, code PXP-2026-UF3EV) was emailed July 1 and has until July 6 2026 23h59 to reply with his jersey size, via diretoria@paninixp.com.br or Instagram @paninixp. Before that date: check whether he replied (email inbox + Instagram DMs). If YES — confirm his identity against the CPF on file (414.422.838-07) at prize handover, arrange delivery, done. If NO reply by July 6 — a re-draw is required: run scripts/generate-draw-snapshot.ts with PXP-2026-UF3EV in the exclusion list (decision #52), draw a new winner, and reuse scripts/send-winner-email.ts (edit the greeting name + recipient) to notify them.
 
-**For the team (draw day, self-service):** 1) log in to /admin/sorteio OFF-CAMERA before going live; 2) export the TXT first; 3) Começar sorteio → Confirmar to start (this flips draw_phase to 'completed' and switches emails); 4) run the draw in the external tool; 5) verify the winner on /admin/sorteio/vencedor (never show the red DADOS INTERNOS zone on stream). Team records the winning code themselves.
+**Post-draw cleanup: DONE this session.** draw_phase confirmed 'completed'; DRAW_ANNOUNCEMENT_ACTIVE flipped to false and redeployed; schema.sql reconciled (16e620c); winning code recorded for next-draw exclusion (Section 13).
 
-**For Leonardo:** send the team the runbook + rehearsal message (Option B: practice everything EXCEPT Confirmar) + the password (separate channel). DECIDE next morning: build an isolated sandbox (separate Supabase + Vercel, ~2-3h) for a full hands-on team rehearsal, OR rely on Option B + Option C (controlled production rehearsal with immediate reset). Leaning Option B.
-
-**After the June 30 draw:** flip DRAW_ANNOUNCEMENT_ACTIVE=false in Vercel, confirm draw_phase='completed' (the button sets it), and record the winning code for next-draw exclusion. The PII toggle (b059931) and the rehearsal decision (Option B + Option C) are now DONE.
-
-**Still deferred (post-June-30):** PROJECT_HANDOFF schema.sql sync (now also add campaign_state), API key rotation, ADMIN_PASSWORD env migration, send-draw-announcement.ts log-line fix, visual duplicate detection, code_count audit, no-email export. Plus: build the EBANCAS store-signature matcher, reprocess the 34 June-25 timeout receipts (still pending from before this session).
+**Still deferred (pick from these for new work):** ADMIN_PASSWORD env migration (still hardcoded 'panini2026' in lib/admin-auth.ts), API key rotation, send-draw-announcement.ts log-line fix, visual duplicate detection, code_count audit, no-email export, EBANCAS store-signature matcher, reprocess the 34 June-25 timeout receipts. (schema.sql sync is now DONE and removed from this list.)
 
 ---
 
