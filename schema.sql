@@ -9,7 +9,8 @@ create table participants (
   code_count    integer not null default 0,
   store_origin  text,
   lgpd_consent  boolean not null default false,
-  created_at    timestamptz not null default now()
+  created_at    timestamptz not null default now(),
+  blocked       boolean not null default false
 );
 
 create index on participants (cpf);
@@ -21,7 +22,7 @@ create table receipts (
   cpf             text not null,
   storage_path    text not null,
   status          text not null default 'uploaded'
-                    check (status in ('uploaded', 'processing', 'approved', 'rejected', 'needs_review')),
+                    check (status in ('uploaded', 'processing', 'approved', 'rejected', 'needs_review', 'awaiting_reupload')),
   amount_on_receipt  numeric(10, 2),
   cnpj_on_receipt    text,
   receipt_number     text,
@@ -34,13 +35,23 @@ create table receipts (
   reviewed_by        text,
   reviewed_at        timestamptz,
   created_at         timestamptz not null default now(),
-  updated_at         timestamptz not null default now()
+  updated_at         timestamptz not null default now(),
+  reupload_request_sent_at    timestamptz,
+  manual_review_email_sent_at timestamptz
 );
 
 create index receipts_participant_id_idx on receipts(participant_id);
 create index receipts_cpf_idx on receipts(cpf);
 create index receipts_status_idx on receipts(status);
 create index receipts_dedupe_idx on receipts(receipt_number, receipt_date, cnpj_on_receipt);
+
+create table campaign_state (
+  id          integer primary key default 1,
+  draw_phase  text not null default 'announced'
+                check (draw_phase in ('announced', 'completed')),
+  updated_at  timestamptz not null default now(),
+  constraint single_row check (id = 1)
+);
 
 create table codes (
   id             uuid primary key default gen_random_uuid(),
@@ -63,10 +74,18 @@ create table error_logs (
 create index error_logs_source_idx on error_logs(source);
 create index error_logs_created_at_idx on error_logs(created_at desc);
 
+create table burned_codes (
+  code       text primary key,
+  reason     text,
+  burned_at  timestamptz not null default now()
+);
+
 alter table participants enable row level security;
 alter table codes enable row level security;
 alter table receipts enable row level security;
 alter table error_logs enable row level security;
+alter table campaign_state enable row level security;
+alter table burned_codes enable row level security;
 
 create policy "public can read ranking fields"
   on participants for select
