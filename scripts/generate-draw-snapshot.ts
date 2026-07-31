@@ -23,6 +23,7 @@ import * as dotenv from 'dotenv'
 import * as path from 'path'
 import * as fs from 'fs'
 import { createClient } from '@supabase/supabase-js'
+import { EXCLUDED_DRAW_CODES } from '../lib/draw-exclusions'
 
 // pdfkit ships as CommonJS; require avoids ESM default-export friction.
 // @types/pdfkit is not installed — using `any` to keep typecheck clean.
@@ -221,8 +222,14 @@ async function main(): Promise<void> {
   console.log(`TOTAL CODES FETCHED: ${rows.length}`)
   console.log('')
 
-  // 3. Extract code strings from rows
-  const codes = rows.map(r => r.code)
+  // 3. Extract code strings from rows, then filter out excluded (past-winner) codes
+  const allCodes = rows.map(r => r.code)
+  const codes = allCodes.filter(c => !EXCLUDED_DRAW_CODES.has(c))
+  const excludedCount = allCodes.length - codes.length
+  if (excludedCount > 0) {
+    console.log(`Excluded ${excludedCount} code(s) present in EXCLUDED_DRAW_CODES.`)
+    console.log('')
+  }
 
   // 4. Ensure output directory exists
   if (!fs.existsSync(EXPORT_DIR)) {

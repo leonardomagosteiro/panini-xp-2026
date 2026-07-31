@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validateAdminSession } from '@/lib/admin-auth'
 import { createAdminClient } from '@/lib/supabase-admin'
+import { EXCLUDED_DRAW_CODES } from '@/lib/draw-exclusions'
 
 const PAGE_SIZE = 1000
 
@@ -93,7 +94,7 @@ export async function GET(req: NextRequest) {
     )
   }
 
-  const codes = rows.map(r => r.code)
+  const codes = rows.map(r => r.code).filter(c => !EXCLUDED_DRAW_CODES.has(c))
 
   // ── txt ───────────────────────────────────────────────────────────────────
 
