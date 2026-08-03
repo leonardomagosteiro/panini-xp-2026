@@ -1,7 +1,7 @@
 # Panini XP 2026 — Living Project Handoff
 
-**Last updated:** Monday, August 3, 2026
-**Status:** Live. Draw #2 completed July 31 (winner verified legitimate; notification pending). draw_phase = 'completed'. HEAD at 2d80dcf plus this bookkeeping commit.
+**Last updated:** Monday, August 3, 2026 (end of day)
+**Status:** CAMPAIGN ENDED. No further draws. All public surfaces closed (pages, APIs, cron, landing). Winner #2 (Minicraque) notified, reply deadline Aug 9; team also contacting via WhatsApp. Admin routes remain live for wind-down. Phase 2 (mothball + archive) pending prize delivery. HEAD at 2b13f7f plus this handoff commit.
 
 ---
 
@@ -309,6 +309,25 @@ The team ran draw #2 self-service via the runbook. campaign_state shows draw_pha
 
 ---
 
+### August 3 — Winner #2 notified; campaign ended; all public surfaces closed
+
+**Bookkeeping (commit 7d1f08d):** handoff updated with the two missing July 31 sessions; scripts/send-overapproval-correction.ts committed; Apple Notes key claim corrected.
+
+**Winner #2 thread (commit 6e575f3):** PXP-2026-R6LTS verified legitimate via SQL (participant Minicraque / Washington Luiz Lopes, receipt approved, not blocked, not burned). scripts/send-winner-email.ts generalized into a reusable CLI (required --to/--name/--draw-date/--deadline, optional --prize-image; stale hardcoded copy now structurally impossible). Prize changed from jersey to official WC2026 ball: copy made prize-neutral (reply-to-confirm-delivery replaces the size question), public/prize-bola-oficial.png added (500px, 135KB). Dry-run to Leonardo's inbox (Resend 8113cae7), image verified after deploy (second dry-run 9a034b42), live send to wluiz2103@gmail.com (Resend 67d8646b, dashboard-confirmed Delivered). Reply deadline: August 9, 2026, 23h59. WhatsApp number retrieved for proactive team contact.
+
+**DECISION: campaign permanently ended.** No draw #3, no re-draw. Note: the winner email's re-draw clause is now void — the team MUST secure Washington's confirmation (WhatsApp outreach, not inbox-waiting).
+
+**Public surfaces closed:**
+- Pages (commit a665aa7): /cadastro and /enviar-recibo replaced with static "Campanha encerrada" screens; ~1,070 lines of form logic deleted (git history preserves for reuse). Fixed pre-existing broken logo reference ('/Logo Panini XP.png' -> '/logo-panini-xp.png').
+- APIs (commit 2b13f7f): /api/cadastro, /api/cpf-lookup, /api/upload-recibo return 410 Gone with Portuguese message; cron /api/cron/timeout-reuploads no-ops at 200 behind intact CRON_SECRET auth. Handler bodies deleted after the dead-code-below-guard approach failed (early return breaks TS flow narrowing; 20 TS18047 errors under strict mode). All verified on production via curl.
+- Landing (Lovable, no commit): paninixp.com.br replaced with the same campaign-ended message; registration CTAs, app links, and the Supabase live-counter snippet removed. Republished and verified.
+
+**Environment finding:** CRON_SECRET was missing from .env.local — the July 31 "6 keys" rebuild is really 7 keys. The Vercel value is marked Sensitive (unrecoverable by design); local testing uses an independently generated local value. Correction: .env.local recovery = Supabase dashboard (3) + Vercel (Resend, OpenAI/Anthropic as needed) + locally generated CRON_SECRET.
+
+**Exclusion list note:** lib/draw-exclusions.ts still contains only UF3EV; R6LTS was never added because the campaign ended and no draw #3 will occur. Deliberate, not an oversight.
+
+---
+
 ## 6. Phase 2 commits
 
 | Hash | Date | Subject |
@@ -493,6 +512,9 @@ The team ran draw #2 self-service via the runbook. campaign_state shows draw_pha
 | 56 | Over-approval correction protocol | Excess codes are deleted AND burned in burned_codes (never merely deleted), counts corrected, amount backfilled, transparent correction email sent (dry-run first) | 2026-07-31 | Deleting without burning would let the generator reissue those strings (same reasoning as decision #55). Established as the standard for any future over-approval. |
 | 57 | Winning-code exclusion implemented in code, not process | lib/draw-exclusions.ts is the single source of truth; both snapshot surfaces (script + API route) apply the same filter | 2026-07-31 | Decision #52 had been recorded as done but never implemented — the handoff lied. A single shared module means the two export paths can never drift apart. |
 | 58 | Live count vs export divergence is expected | /admin/sorteio live count = export line count + number of excluded past winners | 2026-07-31 | The live count reads the codes table unfiltered; the export applies exclusions. Documented so nobody "fixes" it. |
+| 59 | Campaign permanently ended (no draw #3) | All public surfaces closed; admin kept for wind-down; prize fulfillment for winner #2 is the only open customer thread | 2026-08-03 | Business decision by Leonardo. The winner email's re-draw fallback is void, so proactive WhatsApp contact replaces inbox-waiting. |
+| 60 | Closure pattern: delete, don't guard | Pages and API handlers fully deleted with campaign-ended replacements; git history is the preservation mechanism | 2026-08-03 | Dead code below an early return breaks TS flow narrowing under strict mode (20 TS18047 errors, build-failing). Deletion is consistent, type-clean, and revival is a git restore away. |
+| 61 | Cron no-op returns 200, not 410 | /api/cron/timeout-reuploads keeps auth and returns success with status campaign_ended | 2026-08-03 | Vercel cron treats non-2xx as failure and would alert daily on a dead campaign. |
 
 ---
 
@@ -586,11 +608,21 @@ Key recovery sources: Vercel env vars (dashboard) and Supabase dashboard (legacy
 
 ---
 
-## 16. The exact next step
+## 16. The exact next step — Phase 2 mothball (after prize delivery)
 
-**Task A — draw #2 winner thread:** notify Minicraque (PXP-2026-R6LTS) via the send-winner-email.ts pattern (dry-run to Leonardo's inbox first, Resend dashboard confirmation before live send). Then add PXP-2026-R6LTS to lib/draw-exclusions.ts for draw #3, commit, deploy, verify on production export.
-**Task B (deferred list, recommended next pick):** ADMIN_PASSWORD migration from hardcoded 'panini2026' in lib/admin-auth.ts to a Vercel env var.
-**Also deferred:** send-draw-announcement.ts log-line fix, EBANCAS store-signature matcher, 34 timeout receipts, no-email export, API key rotation, manual-approval amount capture (new, see Section 8).
+**Gate: do NOT start Phase 2 until Washington's ball is delivered and confirmed.**
+
+**Watch item:** Washington (wluiz2103@gmail.com) must confirm by Aug 9. Team is contacting via WhatsApp. There is no re-draw fallback — fulfillment must succeed.
+
+**Phase 2 checklist (in order, one session):**
+1. Check Brazilian record-retention obligations for promotional campaigns before any data deletion decision (the privacy policy states 5-year retention for fiscal/consumer-defense law — plan accordingly).
+2. Full DB export (all tables incl. participants, receipts, codes, burned_codes, campaign_state) + full receipts storage-bucket download. Archive locally + one offsite copy. PII: never into the repo.
+3. Verify archives readable before touching any service.
+4. Remove the Vercel cron entry (vercel.json or dashboard) so the no-op stops being scheduled.
+5. Downgrade/cancel paid tiers one by one, verifying after each: Resend paid tier, Supabase paid plan (NOTE: free tier pauses after inactivity — acceptable post-archive), Vercel (if paid), Lovable subscription. Decide domain renewals (paninixp.com.br, app subdomain).
+6. Final handoff update marking the project ARCHIVED, with a "how to revive" note (git history + this document + archives).
+
+**Deferred items now moot (campaign ended):** EBANCAS matcher, 34 timeout receipts, manual-approval amount capture, no-email export, send-draw-announcement log fix, ADMIN_PASSWORD env migration (admin surface dies in Phase 2 anyway — skip unless wind-down drags).
 
 ---
 
