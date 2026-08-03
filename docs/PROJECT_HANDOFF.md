@@ -1,7 +1,7 @@
 # Panini XP 2026 — Living Project Handoff
 
-**Last updated:** Wednesday, July 1, 2026, Brazil time
-**Status:** Post-draw. The June 30 draw executed live on Instagram ~21:36 BRT; draw_phase flipped to 'completed' cleanly. Winner: code PXP-2026-UF3EV -> Rodrigo (verified legit — not blocked, receipt approved, not burned). Winner notified by email July 1 (deadline to reply: July 6 2026, 23h59, or a re-draw is held). Post-draw cleanup done: DRAW_ANNOUNCEMENT_ACTIVE flipped to false and redeployed (rebuild of 8af579e); schema.sql reconciled with live DB (16e620c). Winner-notification script shipped (93866be). HEAD at 93866be.
+**Last updated:** Monday, August 3, 2026
+**Status:** Live. Draw #2 completed July 31 (winner verified legitimate; notification pending). draw_phase = 'completed'. HEAD at 2d80dcf plus this bookkeeping commit.
 
 ---
 
@@ -287,6 +287,28 @@ The 791 needs_review queue is the queue to clear tomorrow via bucketed manual re
 
 ---
 
+### July 31 (pre-dawn) — Draw #2 prep: exclusion system built, over-approval corrected, environment rebuilt
+
+**Context:** Preparation session for draw #2 (scheduled late-day July 31). Rodrigo (draw #1 winner, PXP-2026-UF3EV) had replied within the deadline confirming jersey size; his thread was closed.
+
+**Operational work:**
+- draw_phase manually reset 'completed' -> 'announced' via SQL so draw #2 announcement emails would fire correctly.
+- Approval queue cleared (~60 receipts, manual review).
+- Over-approval caught and corrected: participant Jessyaguiare (participant_id 9f44f4be..., receipt d620142b...) had been approved with 10 codes on a R$239.80 receipt; correct is 4 (floor 239.80/50). Fix: 6 excess codes deleted AND inserted into burned_codes (reason 'over-approval correction 2026-07-31'); code_count and codes_generated set to 4; amount_on_receipt backfilled to 239.80. Verified 4/4/4/239.80 in DB. Transparent correction email sent via new scripts/send-overapproval-correction.ts — dry-run to Leonardo's inbox first, then live to jessica_aguiar@live.com (Resend id 79dff0e2..., dashboard-confirmed Delivered).
+- Root cause note: the manual-approval path stores NULL in amount_on_receipt (the entire July 31 manual batch has null amounts). This is what hid the over-approval. Added to deferred list.
+
+**Shipped (commit 2d80dcf):** Decision #52 (winning-code exclusion) was discovered NEVER IMPLEMENTED — the June 29 handoff claimed the snapshot script accepted an exclusion list, but grep proved no exclusion code existed anywhere. Built it properly: lib/draw-exclusions.ts as single source of truth (currently containing PXP-2026-UF3EV), with the filter applied in BOTH scripts/generate-draw-snapshot.ts and app/api/admin/draw-snapshot/route.ts. Deployed Ready, verified against the PRODUCTION export: UF3EV appears 0 times, 3,201 eligible lines. Known cosmetic divergence: /admin/sorteio live count exceeds the export by exactly 1 (the excluded past winner) — expected behavior, not a bug.
+
+**Environment incident:** .env.local and node_modules were found wiped (cause unknown). Both rebuilt. All 6 env keys restored — Supabase trio from the Supabase dashboard (legacy API keys tab), Resend key from Vercel env vars. CORRECTION to Section 14: keys do NOT live in Apple Notes as previously claimed; the real recovery sources are Vercel env vars and the Supabase dashboard.
+
+### July 31 (draw day) — Draw #2 executed by the team
+
+The team ran draw #2 self-service via the runbook. campaign_state shows draw_phase flipped to 'completed' at 2026-07-31 17:03:39 UTC (14:03 Brazil time) — the trigger fired as designed and post-draw emails have been active since.
+
+**Winning code: PXP-2026-R6LTS — participant Minicraque (participant_id d04a696c-2051-4c99-89d7-544b8ad4c1bc).** Verified legitimate on August 3 via SQL: single code row (created May 26), receipt b4e4d7c2... status approved, participant blocked = false, code absent from burned_codes. Winner notification email and addition to lib/draw-exclusions.ts are the next session tasks.
+
+---
+
 ## 6. Phase 2 commits
 
 | Hash | Date | Subject |
@@ -405,6 +427,7 @@ The 791 needs_review queue is the queue to clear tomorrow via bucketed manual re
 - **awaiting_reupload queue: 117 receipts** — 7-day cron sends re-upload requests; customers can re-submit. These are true unreadables confirmed by Textract; reupload emails were fired during the June 25 reprocess run.
 - **166-customer recovery promise from May 7** — substantially fulfilled. Recipients whose receipts were approved got approval emails; the remainder are somewhere in the 791 needs_review or 117 awaiting_reupload queue.
 - **38 customers** without email on file — still unreachable, still queued for WhatsApp integration.
+- **Manual-approval path stores NULL in amount_on_receipt** (whole July 31 batch affected). This hid the Jessyaguiare over-approval. Fix: admin approval flow should require/store the amount.
 
 ---
 
@@ -467,6 +490,9 @@ The 791 needs_review queue is the queue to clear tomorrow via bucketed manual re
 | 53 | How to neutralize the fraud account before the draw | Delete its codes + zero code_count + reject all its receipts, after a local PII backup | 2026-06-30 | Removes it from the draw pool immediately; backup keeps the action reversible/auditable if the identification is later disputed. Deleting rows (vs marking) required burning the code strings separately — see #55. |
 | 54 | Permanent block mechanism for flagged accounts | participants.blocked boolean, checked at the single code-generation chokepoint and a new single email chokepoint | 2026-06-30 | "Forever" must be enforced in code, not vigilance. One guarded chokepoint per concern (generation, email) means every path — pipeline, manual approval, future scripts — inherits the block automatically. |
 | 55 | Prevent revoked codes from ever being reissued | New burned_codes table; generateUniqueCode rejects any string present in it | 2026-06-30 | Deleting the fraud codes removed them from the codes table, so the unique constraint no longer protected those strings — the generator could theoretically reissue one to a legitimate customer. The burned list is the permanent guard. |
+| 56 | Over-approval correction protocol | Excess codes are deleted AND burned in burned_codes (never merely deleted), counts corrected, amount backfilled, transparent correction email sent (dry-run first) | 2026-07-31 | Deleting without burning would let the generator reissue those strings (same reasoning as decision #55). Established as the standard for any future over-approval. |
+| 57 | Winning-code exclusion implemented in code, not process | lib/draw-exclusions.ts is the single source of truth; both snapshot surfaces (script + API route) apply the same filter | 2026-07-31 | Decision #52 had been recorded as done but never implemented — the handoff lied. A single shared module means the two export paths can never drift apart. |
+| 58 | Live count vs export divergence is expected | /admin/sorteio live count = export line count + number of excluded past winners | 2026-07-31 | The live count reads the codes table unfiltered; the export applies exclusions. Documented so nobody "fixes" it. |
 
 ---
 
@@ -547,7 +573,7 @@ All tables have RLS enabled. **Storage bucket:** `receipts` (private).
 - `DRAW_DATE_DISPLAY` (string e.g. `'30 de junho'` — human-readable draw date shown in draw block)
 - `DRAW_INSTAGRAM_HANDLE` (string e.g. `'paninixp'` — Instagram handle shown in draw block CTA)
 
-Values stored in Apple Notes "Panini XP — Project Keys".
+Key recovery sources: Vercel env vars (dashboard) and Supabase dashboard (legacy API keys tab). The previous Apple Notes claim was incorrect — verified July 31 when .env.local had to be rebuilt from scratch.
 
 ---
 
@@ -560,13 +586,11 @@ Values stored in Apple Notes "Panini XP — Project Keys".
 
 ---
 
-## 16. The exact next step (next session — July 2 onward)
+## 16. The exact next step
 
-**Immediate watch item — the winner deadline.** The winner (Rodrigo, code PXP-2026-UF3EV) was emailed July 1 and has until July 6 2026 23h59 to reply with his jersey size, via diretoria@paninixp.com.br or Instagram @paninixp. Before that date: check whether he replied (email inbox + Instagram DMs). If YES — confirm his identity against the CPF on file (414.422.838-07) at prize handover, arrange delivery, done. If NO reply by July 6 — a re-draw is required: run scripts/generate-draw-snapshot.ts with PXP-2026-UF3EV in the exclusion list (decision #52), draw a new winner, and reuse scripts/send-winner-email.ts (edit the greeting name + recipient) to notify them.
-
-**Post-draw cleanup: DONE this session.** draw_phase confirmed 'completed'; DRAW_ANNOUNCEMENT_ACTIVE flipped to false and redeployed; schema.sql reconciled (16e620c); winning code recorded for next-draw exclusion (Section 13).
-
-**Still deferred (pick from these for new work):** ADMIN_PASSWORD env migration (still hardcoded 'panini2026' in lib/admin-auth.ts), API key rotation, send-draw-announcement.ts log-line fix, visual duplicate detection, code_count audit, no-email export, EBANCAS store-signature matcher, reprocess the 34 June-25 timeout receipts. (schema.sql sync is now DONE and removed from this list.)
+**Task A — draw #2 winner thread:** notify Minicraque (PXP-2026-R6LTS) via the send-winner-email.ts pattern (dry-run to Leonardo's inbox first, Resend dashboard confirmation before live send). Then add PXP-2026-R6LTS to lib/draw-exclusions.ts for draw #3, commit, deploy, verify on production export.
+**Task B (deferred list, recommended next pick):** ADMIN_PASSWORD migration from hardcoded 'panini2026' in lib/admin-auth.ts to a Vercel env var.
+**Also deferred:** send-draw-announcement.ts log-line fix, EBANCAS store-signature matcher, 34 timeout receipts, no-email export, API key rotation, manual-approval amount capture (new, see Section 8).
 
 ---
 
